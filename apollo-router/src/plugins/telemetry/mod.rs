@@ -103,7 +103,7 @@ use crate::plugins::telemetry::tracing::apollo_telemetry::APOLLO_PRIVATE_OPERATI
 use crate::plugins::telemetry::tracing::TracingConfigurator;
 use crate::plugins::telemetry::utils::TracingUtils;
 use crate::query_planner::OperationKind;
-use crate::register_plugin;
+// use crate::register_plugin;
 use crate::router_factory::Endpoint;
 use crate::services::execution;
 use crate::services::router;
@@ -1807,7 +1807,7 @@ fn handle_error_internal<T: Into<opentelemetry::global::Error>>(
     }
 }
 
-register_plugin!("apollo", "telemetry", Telemetry);
+// register_plugin!("apollo", "telemetry", Telemetry);
 
 fn request_ftv1(mut req: SubgraphRequest) -> SubgraphRequest {
     if req
