@@ -5722,3 +5722,12 @@ fn filtered_defer_fragment() {
 
     assert_json_snapshot!(response);
 }
+
+#[test]
+fn test_non_intersecting_fragments_are_supported() {
+    let schema_str = include_str!("../../testdata/non_intersecting_fragments_schema.graphql");
+    let schema = Schema::parse_test(schema_str, &Default::default()).unwrap();
+    let query_str = include_str!("../../testdata/non_intersecting_fragments.graphql");
+    // should not panic
+    Query::parse(query_str, &schema, &Default::default()).unwrap();
+}

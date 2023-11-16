@@ -1,0 +1,9 @@
+{
+  node {
+   __typename
+   _id
+   ... on Video {
+     __isVideo: __typename
+   }
+  }
+}
