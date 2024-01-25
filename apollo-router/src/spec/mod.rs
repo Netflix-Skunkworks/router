@@ -30,7 +30,7 @@ pub(crate) const LINK_AS_ARGUMENT: &str = "as";
 /// GraphQL parsing errors.
 #[derive(Error, Debug, Display, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
-pub(crate) enum SpecError {
+pub enum SpecError {
     /// missing input file for query
     UnknownFileId,
     /// selection processing recursion limit exceeded
