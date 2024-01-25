@@ -26,7 +26,7 @@ use crate::json_ext::Object;
 use crate::json_ext::Path;
 use crate::plugins::authentication::APOLLO_AUTHENTICATION_JWT_CLAIMS;
 use crate::plugins::authorization::CacheKeyMetadata;
-use crate::query_planner::fetch::OperationKind;
+pub use crate::query_planner::fetch::OperationKind;
 use crate::query_planner::fetch::QueryHash;
 use crate::Context;
 
