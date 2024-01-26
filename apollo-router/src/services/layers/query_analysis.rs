@@ -216,13 +216,13 @@ impl QueryAnalysisLayer {
     }
 }
 
-pub(crate) type ParsedDocument = Arc<ParsedDocumentInner>;
+pub type ParsedDocument = Arc<ParsedDocumentInner>;
 
 #[derive(Debug)]
-pub(crate) struct ParsedDocumentInner {
-    pub(crate) ast: ast::Document,
-    pub(crate) executable: Arc<Valid<ExecutableDocument>>,
-    pub(crate) hash: Arc<QueryHash>,
+pub struct ParsedDocumentInner {
+    pub ast: ast::Document,
+    pub executable: Arc<Valid<ExecutableDocument>>,
+    pub hash: Arc<QueryHash>,
 }
 
 impl Display for ParsedDocumentInner {
