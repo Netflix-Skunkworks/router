@@ -101,6 +101,7 @@ pub use crate::test_harness::make_fake_batch;
 pub use crate::test_harness::MockedSubgraphs;
 pub use crate::test_harness::TestHarness;
 pub use crate::uplink::UplinkConfig;
+pub use services::layers::query_analysis::{ParsedDocument, ParsedDocumentInner};
 
 /// Not part of the public API
 #[doc(hidden)]
