@@ -130,7 +130,7 @@ pub(crate) struct FetchNode {
 }
 
 #[derive(Clone, Default, Hash, PartialEq, Eq, Deserialize, Serialize)]
-pub(crate) struct QueryHash(#[serde(with = "hex")] pub(crate) Vec<u8>);
+pub struct QueryHash(#[serde(with = "hex")] pub Vec<u8>);
 
 impl std::fmt::Debug for QueryHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
