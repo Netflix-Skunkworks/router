@@ -162,10 +162,10 @@ pub type ParsedDocument = Arc<ParsedDocumentInner>;
 
 #[derive(Debug, Default)]
 pub struct ParsedDocumentInner {
-    pub(crate) ast: ast::Document,
-    pub(crate) executable: Arc<ExecutableDocument>,
-    pub(crate) parse_errors: Option<DiagnosticList>,
-    pub(crate) validation_errors: Option<DiagnosticList>,
+    pub ast: ast::Document,
+    pub executable: Arc<ExecutableDocument>,
+    pub parse_errors: Option<DiagnosticList>,
+    pub validation_errors: Option<DiagnosticList>,
 }
 
 impl Display for ParsedDocumentInner {
