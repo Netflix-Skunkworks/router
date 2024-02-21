@@ -117,6 +117,7 @@ pub enum FetchError {
 }
 
 use std::sync::OnceLock;
+
 static mut TO_GRAPHQL_ERROR: OnceLock<Box<dyn Fn(&FetchError, Option<Path>) -> Error + 'static>> =
     OnceLock::new();
 pub unsafe fn set_to_graphql_error(
@@ -143,7 +144,8 @@ pub(crate) fn setup_test_custom_errors() {
 pub fn setup_custom_router_errors() {
     unsafe {
         set_to_graphql_error(FetchError::to_graphql_error_for_tests);
-        set_into_graphql_errors(RouterError::into_graphql_errors_for_tests)
+        set_into_graphql_errors(RouterError::into_graphql_errors_for_tests);
+        set_into_graphql_errors_planner(QueryPlannerError::into_graphql_errors_for_tests);
     }
 }
 
@@ -409,8 +411,21 @@ impl IntoGraphQLErrors for Vec<GraphQLError> {
     }
 }
 
-impl IntoGraphQLErrors for QueryPlannerError {
-    fn into_graphql_errors(self) -> Result<Vec<Error>, Self> {
+static mut INTO_GRAPHQL_ERRORS_PLANNER: OnceLock<
+    Box<dyn Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static>,
+> = OnceLock::new();
+pub unsafe fn set_into_graphql_errors_planner(
+    into_graphql_errors: impl Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static,
+) {
+    crate::error::INTO_GRAPHQL_ERRORS_PLANNER
+        .set(Box::new(into_graphql_errors))
+        .map_err(|_| "into_graphql_errors_planner was already set")
+        .unwrap();
+}
+
+impl QueryPlannerError {
+    #[cfg(test)]
+    fn into_graphql_errors_for_tests(self) -> Result<Vec<Error>, Self> {
         match self {
             QueryPlannerError::SpecError(err) => {
                 let gql_err = match err.custom_extension_details() {
@@ -447,11 +462,11 @@ impl IntoGraphQLErrors for QueryPlannerError {
                 .extension_code("INTROSPECTION_ERROR")
                 .build()]),
             QueryPlannerError::LimitExceeded(OperationLimits {
-                depth,
-                height,
-                root_fields,
-                aliases,
-            }) => {
+                                                 depth,
+                                                 height,
+                                                 root_fields,
+                                                 aliases,
+                                             }) => {
                 let mut errors = Vec::new();
                 let mut build = |exceeded, code, message| {
                     if exceeded {
@@ -487,6 +502,18 @@ impl IntoGraphQLErrors for QueryPlannerError {
             }
             err => Err(err),
         }
+    }
+}
+
+impl IntoGraphQLErrors for QueryPlannerError {
+
+    fn into_graphql_errors(self) -> Result<Vec<Error>, Self> {
+        let callback = unsafe {
+            INTO_GRAPHQL_ERRORS_PLANNER
+                .get()
+                .expect("into_graphql_errors_planner was not set")
+        };
+        callback(self)
     }
 }
 

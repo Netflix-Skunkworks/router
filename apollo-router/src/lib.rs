@@ -79,6 +79,7 @@ pub mod test_harness;
 pub mod tracer;
 mod uplink;
 
+pub use error::set_into_graphql_errors_planner;
 pub use error::set_into_graphql_errors;
 pub use error::set_to_graphql_error;
 pub use error::CacheResolverError;
