@@ -15,6 +15,7 @@ use crate::spec::Schema;
 use crate::test_harness::MockedSubgraphs;
 use crate::Configuration;
 use crate::Context;
+use crate::error::setup_test_custom_errors;
 use crate::Notify;
 use crate::TestHarness;
 
@@ -1324,6 +1325,8 @@ async fn root_typename_with_defer_in_defer() {
 
 #[tokio::test]
 async fn query_reconstruction() {
+    setup_test_custom_errors();
+
     let schema = r#"schema
     @link(url: "https://specs.apollo.dev/link/v1.0")
     @link(url: "https://specs.apollo.dev/join/v0.2", for: EXECUTION)
@@ -3032,6 +3035,7 @@ async fn multiple_interface_types() {
 
 #[tokio::test]
 async fn id_scalar_can_overflow_i32() {
+    setup_test_custom_errors();
     // Hack to let the first subgraph fetch contain an ID variable:
     // ```
     // type Query {
