@@ -1267,6 +1267,7 @@ mod tests {
     use crate::protocols::websocket::WebSocketProtocol;
     use crate::query_planner::fetch::OperationKind;
     use crate::Context;
+    use crate::error::setup_test_custom_errors;
 
     // starts a local server emulating a subgraph returning status code 400
     async fn emulate_subgraph_bad_request(listener: TcpListener) {
@@ -2043,6 +2044,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_subgraph_service_invalid_response() {
+        setup_test_custom_errors();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_addr = listener.local_addr().unwrap();
         tokio::task::spawn(emulate_subgraph_ok_status_invalid_response(listener));
@@ -2123,6 +2125,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_subgraph_invalid_status_invalid_response_application_graphql() {
+        setup_test_custom_errors();
+
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_addr = listener.local_addr().unwrap();
         tokio::task::spawn(
@@ -2263,6 +2267,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_bad_status_code_should_not_fail() {
+        setup_test_custom_errors();
+
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_addr = listener.local_addr().unwrap();
         tokio::task::spawn(emulate_subgraph_bad_request(listener));
@@ -2304,6 +2310,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_bad_content_type() {
+        setup_test_custom_errors();
+
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_addr = listener.local_addr().unwrap();
         tokio::task::spawn(emulate_subgraph_bad_response_format(listener));
@@ -2390,6 +2398,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_unauthorized() {
+        setup_test_custom_errors();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let socket_addr = listener.local_addr().unwrap();
         tokio::task::spawn(emulate_subgraph_unauthorized(listener));
