@@ -426,10 +426,10 @@ static mut INTO_GRAPHQL_ERRORS_PLANNER: OnceLock<
     Box<dyn Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static>,
 > = OnceLock::new();
 pub unsafe fn set_into_graphql_errors_planner(
-    into_graphql_errors: impl Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static,
+    into_graphql_errors_planner: impl Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static,
 ) {
     crate::error::INTO_GRAPHQL_ERRORS_PLANNER
-        .set(Box::new(into_graphql_errors))
+        .set(Box::new(into_graphql_errors_planner))
         .map_err(|_| "into_graphql_errors_planner was already set")
         .unwrap();
 }
