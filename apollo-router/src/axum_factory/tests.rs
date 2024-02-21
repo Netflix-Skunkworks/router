@@ -89,6 +89,7 @@ use crate::uplink::license_enforcement::LicenseState;
 use crate::ApolloRouterError;
 use crate::Configuration;
 use crate::Context;
+use crate::error::setup_test_custom_errors;
 use crate::ListenAddr;
 use crate::TestHarness;
 
@@ -973,6 +974,7 @@ async fn response_with_custom_endpoint_wildcard() -> Result<(), ApolloRouterErro
 
 #[tokio::test]
 async fn response_failure() -> Result<(), ApolloRouterError> {
+    setup_test_custom_errors();
     let router_service = router::service::from_supergraph_mock_callback(move |req| {
         let example_response = crate::error::FetchError::SubrequestHttpError {
             status_code: Some(200),
@@ -2289,6 +2291,7 @@ async fn test_supergraph_and_health_check_same_port_different_listener() {
 
 #[tokio::test]
 async fn test_supergraph_timeout() {
+    setup_test_custom_errors();
     let config = serde_json::json!({
         "supergraph": {
             "defer_support": false,

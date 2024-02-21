@@ -122,7 +122,74 @@ pub unsafe fn set_to_graphql_error(
         .unwrap();
 }
 
+#[cfg(test)]
+static CUSTOM_ERRORS_SETUP: OnceLock<bool> = OnceLock::new();
+
+#[cfg(test)]
+pub(crate) fn setup_test_custom_errors() {
+    CUSTOM_ERRORS_SETUP.get_or_init(|| {
+        setup_custom_router_errors();
+        true
+    });
+}
+
+#[cfg(test)]
+pub fn setup_custom_router_errors() {
+    unsafe {
+        set_to_graphql_error(FetchError::to_graphql_error_for_tests);
+        set_into_graphql_errors(RouterError::into_graphql_errors_for_tests)
+    }
+}
+
 impl FetchError {
+    #[cfg(test)]
+    /// Convert the fetch error to a GraphQL error.
+    pub(crate) fn to_graphql_error_for_tests(&self, path: Option<Path>) -> Error {
+        let mut value: Value = serde_json_bytes::to_value(self).unwrap_or_default();
+        if let Some(extensions) = value.as_object_mut() {
+            extensions
+                .entry("code")
+                .or_insert_with(|| self.extension_code().into());
+            // Following these specs https://www.apollographql.com/docs/apollo-server/data/errors/#including-custom-error-details
+            match self {
+                FetchError::SubrequestHttpError {
+                    service,
+                    status_code,
+                    ..
+                } => {
+                    extensions
+                        .entry("service")
+                        .or_insert_with(|| service.clone().into());
+                    extensions.remove("status_code");
+                    if let Some(status_code) = status_code {
+                        extensions
+                            .insert("http", serde_json_bytes::json!({ "status": status_code }));
+                    }
+                }
+                FetchError::SubrequestMalformedResponse { service, .. }
+                | FetchError::SubrequestUnexpectedPatchResponse { service }
+                | FetchError::SubrequestWsError { service, .. } => {
+                    extensions
+                        .entry("service")
+                        .or_insert_with(|| service.clone().into());
+                }
+                FetchError::ValidationInvalidTypeVariable { name } => {
+                    extensions
+                        .entry("name")
+                        .or_insert_with(|| name.clone().into());
+                }
+                _ => (),
+            }
+        }
+
+        Error {
+            message: self.to_string(),
+            locations: Default::default(),
+            path,
+            extensions: value.as_object().unwrap().to_owned(),
+        }
+    }
+
     /// Convert the fetch error to a GraphQL error.
     pub(crate) fn to_graphql_error(&self, path: Option<Path>) -> Error {
         let callback = unsafe {
@@ -198,6 +265,7 @@ pub unsafe fn set_into_graphql_errors(
 }
 
 impl IntoGraphQLErrors for RouterError {
+
     fn into_graphql_errors(self) -> Result<Vec<Error>, Self> {
         let callback = unsafe {
             INTO_GRAPHQL_ERRORS
@@ -205,6 +273,17 @@ impl IntoGraphQLErrors for RouterError {
                 .expect("into_graphql_errors was not set")
         };
         callback(self)
+    }
+}
+
+impl RouterError {
+    #[cfg(test)]
+    fn into_graphql_errors_for_tests(self) -> Result<Vec<Error>, Self> {
+        match self {
+            RouterError::CacheResolver(e) => e.into_graphql_errors().map_err(|e| RouterError::CacheResolver(e)),
+            RouterError::QueryPlanner(e) => e.into_graphql_errors().map_err(|e| RouterError::QueryPlanner(e)),
+            RouterError::Planner(e) => e.into_graphql_errors().map_err(|e| RouterError::Planner(e)),
+        }
     }
 }
 
