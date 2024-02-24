@@ -85,9 +85,6 @@ static ORIGIN_HEADER_VALUE: HeaderValue = HeaderValue::from_static("origin");
 #[derive(Clone)]
 pub(crate) struct RouterService {
     supergraph_creator: Arc<SupergraphCreator>,
-    apq_layer: APQLayer,
-    persisted_query_layer: Arc<PersistedQueryLayer>,
-    query_analysis_layer: QueryAnalysisLayer,
     http_max_request_bytes: usize,
     experimental_batching: Batching,
 }
@@ -95,17 +92,11 @@ pub(crate) struct RouterService {
 impl RouterService {
     pub(crate) fn new(
         supergraph_creator: Arc<SupergraphCreator>,
-        apq_layer: APQLayer,
-        persisted_query_layer: Arc<PersistedQueryLayer>,
-        query_analysis_layer: QueryAnalysisLayer,
         http_max_request_bytes: usize,
         experimental_batching: Batching,
     ) -> Self {
         RouterService {
             supergraph_creator,
-            apq_layer,
-            persisted_query_layer,
-            query_analysis_layer,
             http_max_request_bytes,
             experimental_batching,
         }
@@ -227,28 +218,11 @@ impl RouterService {
         &self,
         supergraph_request: SupergraphRequest,
     ) -> Result<router::Response, BoxError> {
-        let mut request_res = self
-            .persisted_query_layer
-            .supergraph_request(supergraph_request);
-
-        if let Ok(supergraph_request) = request_res {
-            request_res = self.apq_layer.supergraph_request(supergraph_request).await;
-        }
-
-        let SupergraphResponse { response, context } = match request_res {
-            Err(response) => response,
-            Ok(request) => match self.query_analysis_layer.supergraph_request(request).await {
-                Err(response) => response,
-                Ok(request) => match self
-                    .persisted_query_layer
-                    .supergraph_request_with_analyzed_query(request)
-                    .await
-                {
-                    Err(response) => response,
-                    Ok(request) => self.supergraph_creator.create().oneshot(request).await?,
-                },
-            },
-        };
+        let SupergraphResponse { response, context } = self
+            .supergraph_creator
+            .create()
+            .oneshot(supergraph_request)
+            .await?;
 
         let ClientRequestAccepts {
             wildcard: accepts_wildcard,

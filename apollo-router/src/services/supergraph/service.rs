@@ -48,6 +48,7 @@ use crate::router_factory::create_plugins;
 use crate::router_factory::create_subgraph_services;
 use crate::services::execution::QueryPlan;
 use crate::services::layers::allow_only_http_post_mutations::AllowOnlyHttpPostMutationsLayer;
+use crate::services::layers::apq::APQLayer;
 use crate::services::layers::content_negotiation;
 use crate::services::layers::persisted_queries::PersistedQueryLayer;
 use crate::services::layers::query_analysis::ParsedDocument;
@@ -82,6 +83,9 @@ pub(crate) type Plugins = IndexMap<String, Box<dyn DynPlugin>>;
 pub(crate) struct SupergraphService {
     execution_service_factory: ExecutionServiceFactory,
     query_planner_service: CachingQueryPlanner<BridgeQueryPlanner>,
+    apq_layer: APQLayer,
+    persisted_query_layer: Arc<PersistedQueryLayer>,
+    query_analysis_layer: QueryAnalysisLayer,
     schema: Arc<Schema>,
     notify: Notify<String, graphql::Response>,
 }
@@ -92,12 +96,18 @@ impl SupergraphService {
     pub(crate) fn new(
         query_planner_service: CachingQueryPlanner<BridgeQueryPlanner>,
         execution_service_factory: ExecutionServiceFactory,
+        apq_layer: APQLayer,
+        persisted_query_layer: Arc<PersistedQueryLayer>,
+        query_analysis_layer: QueryAnalysisLayer,
         schema: Arc<Schema>,
         notify: Notify<String, graphql::Response>,
     ) -> Self {
         SupergraphService {
             query_planner_service,
             execution_service_factory,
+            apq_layer,
+            persisted_query_layer,
+            query_analysis_layer,
             schema,
             notify,
         }
@@ -123,6 +133,10 @@ impl Service<SupergraphRequest> for SupergraphService {
 
         let schema = self.schema.clone();
 
+        let apq_layer = self.apq_layer.clone();
+        let pq_layer = self.persisted_query_layer.clone();
+        let query_analysis_layer = self.query_analysis_layer.clone();
+
         let context_cloned = req.context.clone();
         let fut = service_call(
             planning,
@@ -130,6 +144,9 @@ impl Service<SupergraphRequest> for SupergraphService {
             schema,
             req,
             self.notify.clone(),
+            apq_layer,
+            pq_layer,
+            query_analysis_layer,
         )
         .or_else(|error: BoxError| async move {
             let errors = vec![crate::error::Error {
@@ -160,7 +177,40 @@ async fn service_call(
     schema: Arc<Schema>,
     req: SupergraphRequest,
     notify: Notify<String, graphql::Response>,
+    apq_layer: APQLayer,
+    persisted_query_layer: Arc<PersistedQueryLayer>,
+    query_analysis_layer: QueryAnalysisLayer,
 ) -> Result<SupergraphResponse, BoxError> {
+    let mut request_res = persisted_query_layer.supergraph_request(req);
+
+    if let Ok(supergraph_request) = request_res {
+        request_res = apq_layer.supergraph_request(supergraph_request).await;
+    }
+
+    let req = match request_res {
+        Ok(req) => req,
+        Err(response) => {
+            return Ok(response);
+        }
+    };
+
+    let req = match query_analysis_layer.supergraph_request(req).await {
+        Ok(req) => req,
+        Err(response) => {
+            return Ok(response);
+        }
+    };
+
+    let req = match persisted_query_layer
+        .supergraph_request_with_analyzed_query(req)
+        .await
+    {
+        Ok(req) => req,
+        Err(response) => {
+            return Ok(response);
+        }
+    };
+
     let context = req.context;
     let body = req.supergraph_request.body();
     let variables = body.variables.clone();
