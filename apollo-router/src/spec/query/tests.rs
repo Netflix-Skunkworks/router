@@ -1,8 +1,8 @@
+use crate::error::setup_test_custom_errors;
 use apollo_compiler::Parser;
 use insta::assert_json_snapshot;
 use serde_json_bytes::json;
 use test_log::test;
-use crate::error::setup_test_custom_errors;
 
 use super::*;
 use crate::json_ext::ValueExt;

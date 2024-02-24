@@ -1,5 +1,4 @@
 //! Implements the router phase of the request lifecycle.
-
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -57,6 +56,8 @@ use crate::services::new_service::ServiceFactory;
 use crate::services::router;
 #[cfg(test)]
 use crate::services::supergraph;
+use crate::services::translate;
+use crate::services::translate::TranslateService;
 use crate::services::HasPlugins;
 #[cfg(test)]
 use crate::services::HasSchema;
@@ -229,27 +230,42 @@ impl RouterService {
         &self,
         supergraph_request: SupergraphRequest,
     ) -> Result<router::Response, BoxError> {
-        let mut request_res = self
-            .persisted_query_layer
-            .supergraph_request(supergraph_request);
+        let translate_service = TranslateService;
 
-        if let Ok(supergraph_request) = request_res {
-            request_res = self.apq_layer.supergraph_request(supergraph_request).await;
-        }
+        let translate_service = self
+            .supergraph_creator
+            .plugins()
+            .iter()
+            .rev()
+            .fold(translate_service.boxed(), |acc, (_, e)| {
+                e.translate_service(acc)
+            });
 
-        let SupergraphResponse { response, context } = match request_res {
+        let translated = translate_service.oneshot(supergraph_request).await;
+
+        let SupergraphResponse { response, context } = match translated {
             Err(response) => response,
-            Ok(request) => match self.query_analysis_layer.supergraph_request(request).await {
-                Err(response) => response,
-                Ok(request) => match self
+            Ok(request) => {
+                let mut request_res = self
                     .persisted_query_layer
-                    .supergraph_request_with_analyzed_query(request)
-                    .await
-                {
+                    .supergraph_request(request);
+
+                if let Ok(supergraph_request) = request_res {
+                    request_res = self.apq_layer.supergraph_request(supergraph_request).await;
+                }
+
+                match request_res {
                     Err(response) => response,
-                    Ok(request) => self.supergraph_creator.create().oneshot(request).await?,
-                },
-            },
+                    Ok(request) => match self
+                        .persisted_query_layer
+                        .supergraph_request_with_analyzed_query(request)
+                        .await
+                        {
+                            Err(response) => response,
+                            Ok(request) => self.supergraph_creator.create().oneshot(request).await?,
+                        },
+                }
+            }
         };
 
         let ClientRequestAccepts {

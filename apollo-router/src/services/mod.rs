@@ -32,6 +32,7 @@ pub mod router;
 pub mod subgraph;
 pub(crate) mod subgraph_service;
 pub mod supergraph;
+pub mod translate;
 pub mod transport;
 pub(crate) mod trust_dns_connector;
 

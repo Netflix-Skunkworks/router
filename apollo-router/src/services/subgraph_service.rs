@@ -1255,6 +1255,7 @@ mod tests {
     use crate::configuration::load_key;
     use crate::configuration::TlsClient;
     use crate::configuration::TlsClientAuth;
+    use crate::error::setup_test_custom_errors;
     use crate::graphql::Error;
     use crate::graphql::Request;
     use crate::graphql::Response;
@@ -1267,7 +1268,6 @@ mod tests {
     use crate::protocols::websocket::WebSocketProtocol;
     use crate::query_planner::fetch::OperationKind;
     use crate::Context;
-    use crate::error::setup_test_custom_errors;
 
     // starts a local server emulating a subgraph returning status code 400
     async fn emulate_subgraph_bad_request(listener: TcpListener) {

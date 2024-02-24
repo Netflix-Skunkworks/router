@@ -45,6 +45,7 @@ use crate::services::execution;
 use crate::services::router;
 use crate::services::subgraph;
 use crate::services::supergraph;
+use crate::services::translate;
 use crate::ListenAddr;
 
 type InstanceFactory = fn(
@@ -326,6 +327,11 @@ pub trait Plugin: Send + Sync + 'static {
         service
     }
 
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService {
+        service
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -400,6 +406,11 @@ pub trait PluginUnstable: Send + Sync + 'static {
         service
     }
 
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService {
+        service
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -453,6 +464,11 @@ where
         Plugin::subgraph_service(self, subgraph_name, service)
     }
 
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService {
+        Plugin::translate_service(self, service)
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -473,8 +489,7 @@ where
 /// Internal Plugin trait
 ///
 /// This trait defines lifecycle hooks that enable hooking into Apollo Router services. The hooks that are not already defined
-/// in the [Plugin] or [PluginUnstable] traits are internal hooks not yet open to public usage. This allows testing of new plugin
-/// hooks without committing to their API right away.
+/// in the [Plugin] or [PluginUnstable] traits are internal hooks not yet open to public usage. This allows testing of new plugin hooks without committing to their API right away.
 /// The trait also provides a default implementations for each hook, which returns the associated service unmodified.
 /// For more information about the plugin lifecycle please check this documentation <https://www.apollographql.com/docs/router/customizations/native/#plugin-lifecycle>
 #[async_trait]
@@ -529,6 +544,11 @@ pub(crate) trait PluginPrivate: Send + Sync + 'static {
         service
     }
 
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService {
+        service
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -579,6 +599,11 @@ where
         PluginUnstable::subgraph_service(self, subgraph_name, service)
     }
 
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService {
+        PluginUnstable::translate_service(self, service)
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -627,6 +652,9 @@ pub(crate) trait DynPlugin: Send + Sync + 'static {
         service: subgraph::BoxService,
     ) -> subgraph::BoxService;
 
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService;
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str;
 
@@ -664,6 +692,11 @@ where
 
     fn name(&self) -> &'static str {
         self.name()
+    }
+
+    /// TODO
+    fn translate_service(&self, service: translate::BoxService) -> translate::BoxService {
+        self.translate_service(service)
     }
 
     /// Return one or several `Endpoint`s and `ListenAddr` and the router will serve your custom web Endpoint(s).

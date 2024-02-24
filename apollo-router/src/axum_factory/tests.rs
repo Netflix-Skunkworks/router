@@ -59,6 +59,7 @@ use crate::configuration::HealthCheck;
 use crate::configuration::Homepage;
 use crate::configuration::Sandbox;
 use crate::configuration::Supergraph;
+use crate::error::setup_test_custom_errors;
 use crate::graphql;
 use crate::http_server_factory::HttpServerFactory;
 use crate::http_server_factory::HttpServerHandle;
@@ -89,7 +90,6 @@ use crate::uplink::license_enforcement::LicenseState;
 use crate::ApolloRouterError;
 use crate::Configuration;
 use crate::Context;
-use crate::error::setup_test_custom_errors;
 use crate::ListenAddr;
 use crate::TestHarness;
 
