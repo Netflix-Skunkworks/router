@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use std::task::Poll;
+use std::sync::OnceLock;
 
 use axum::body::StreamBody;
 use axum::response::*;
@@ -82,6 +83,19 @@ pub(crate) static MULTIPART_SUBSCRIPTION_CONTENT_TYPE_HEADER_VALUE: HeaderValue 
 static ACCEL_BUFFERING_HEADER_NAME: HeaderName = HeaderName::from_static("x-accel-buffering");
 static ACCEL_BUFFERING_HEADER_VALUE: HeaderValue = HeaderValue::from_static("no");
 static ORIGIN_HEADER_VALUE: HeaderValue = HeaderValue::from_static("origin");
+
+type TransformRequestFn = Box<dyn Fn(SupergraphRequest) -> BoxFuture<'static, Result<SupergraphRequest, SupergraphResponse>> + Send + Sync>;
+
+static TRANSFORM_REQUEST_FN: OnceLock<TransformRequestFn> = OnceLock::new();
+
+pub fn set_transform_request_fn(
+    transform_request_fn: TransformRequestFn,
+) {
+    TRANSFORM_REQUEST_FN
+        .set(Box::new(transform_request_fn))
+        .map_err(|_| "transform_request_fn was already set")
+        .unwrap();
+}
 
 /// Containing [`Service`] in the request lifecyle.
 #[derive(Clone)]
@@ -229,13 +243,19 @@ impl RouterService {
         &self,
         supergraph_request: SupergraphRequest,
     ) -> Result<router::Response, BoxError> {
-        let mut request_res = self
-            .persisted_query_layer
-            .supergraph_request(supergraph_request);
+        // let mut request_res = self
+        //     .persisted_query_layer
+        //     .supergraph_request(supergraph_request);
 
-        if let Ok(supergraph_request) = request_res {
-            request_res = self.apq_layer.supergraph_request(supergraph_request).await;
-        }
+        // if let Ok(supergraph_request) = request_res {
+        //     request_res = self.apq_layer.supergraph_request(supergraph_request).await;
+        // }
+        //
+        let transform = TRANSFORM_REQUEST_FN
+                .get()
+                .expect("transform_request_fn was not set");
+
+        let request_res = transform(supergraph_request).await;
 
         let SupergraphResponse { response, context } = match request_res {
             Err(response) => response,
