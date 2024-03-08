@@ -625,6 +625,8 @@ async fn handle_graphql(
                 return Elapsed::new().into_response();
             }
 
+            tracing::error!("Internal Error: {:?}", e);
+
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "router service call failed",
