@@ -2,6 +2,7 @@
 use std::sync::Arc;
 
 use apollo_compiler::execution::GraphQLError;
+use apollo_federation::error::FederationError;
 use displaydoc::Display;
 use lazy_static::__Deref;
 use router_bridge::introspect::IntrospectionError;
@@ -11,6 +12,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
 use tokio::task::JoinError;
+use tower::BoxError;
 
 pub(crate) use crate::configuration::ConfigurationError;
 pub(crate) use crate::graphql::Error;
@@ -107,13 +109,6 @@ pub enum FetchError {
 
     /// could not find path: {reason}
     ExecutionPathNotFound { reason: String },
-    /// could not compress request: {reason}
-    CompressionError {
-        /// The service that failed.
-        service: String,
-        /// The reason the compression failed.
-        reason: String,
-    },
 }
 
 use std::sync::OnceLock;
@@ -229,7 +224,6 @@ impl ErrorExtension for FetchError {
             FetchError::SubrequestHttpError { .. } => "SUBREQUEST_HTTP_ERROR",
             FetchError::SubrequestWsError { .. } => "SUBREQUEST_WEBSOCKET_ERROR",
             FetchError::ExecutionPathNotFound { .. } => "EXECUTION_PATH_NOT_FOUND",
-            FetchError::CompressionError { .. } => "COMPRESSION_ERROR",
             FetchError::MalformedRequest { .. } => "MALFORMED_REQUEST",
             FetchError::MalformedResponse { .. } => "MALFORMED_RESPONSE",
             FetchError::ExecutionFieldNotFound { .. } => "EXECUTION_FIELD_NOT_FOUND",
@@ -323,16 +317,28 @@ impl From<QueryPlannerError> for CacheResolverError {
 /// Error types for service building.
 #[derive(Error, Debug, Display)]
 pub(crate) enum ServiceBuildError {
-    /// couldn't build Router Service: {0}
+    /// couldn't build Query Planner Service: {0}
     QueryPlannerError(QueryPlannerError),
+
+    /// API schema generation failed: {0}
+    ApiSchemaError(FederationError),
 
     /// schema error: {0}
     Schema(SchemaError),
+
+    /// couldn't build Router service: {0}
+    ServiceError(BoxError),
 }
 
 impl From<SchemaError> for ServiceBuildError {
     fn from(err: SchemaError) -> Self {
         ServiceBuildError::Schema(err)
+    }
+}
+
+impl From<FederationError> for ServiceBuildError {
+    fn from(err: FederationError) -> Self {
+        ServiceBuildError::ApiSchemaError(err)
     }
 }
 
@@ -345,6 +351,12 @@ impl From<Vec<PlannerError>> for ServiceBuildError {
 impl From<router_bridge::error::Error> for ServiceBuildError {
     fn from(error: router_bridge::error::Error) -> Self {
         ServiceBuildError::QueryPlannerError(error.into())
+    }
+}
+
+impl From<BoxError> for ServiceBuildError {
+    fn from(err: BoxError) -> Self {
+        ServiceBuildError::ServiceError(err)
     }
 }
 
@@ -366,7 +378,7 @@ pub enum QueryPlannerError {
     /// Cache resolution failed: {0}
     CacheResolverError(Arc<CacheResolverError>),
 
-    /// empty query plan. This often means an unhandled Introspection query was sent. Please file an issue to apollographql/router.
+    /// empty query plan. This behavior is unexpected and we suggest opening an issue to apollographql/router with a reproduction.
     EmptyPlan(UsageReporting), // usage_reporting_signature
 
     /// unhandled planner result
@@ -700,7 +712,7 @@ impl IntoGraphQLErrors for ValidationErrors {
             .iter()
             .map(|diagnostic| {
                 Error::builder()
-                    .message(diagnostic.message().to_string())
+                    .message(diagnostic.error.to_string())
                     .locations(
                         diagnostic
                             .get_line_column()
@@ -726,15 +738,9 @@ impl std::fmt::Display for ValidationErrors {
                 f.write_str("\n")?;
             }
             if let Some(location) = error.get_line_column() {
-                write!(
-                    f,
-                    "[{}:{}] {}",
-                    location.line,
-                    location.column,
-                    error.message()
-                )?;
+                write!(f, "[{}:{}] {}", location.line, location.column, error.error)?;
             } else {
-                write!(f, "{}", error.message())?;
+                write!(f, "{}", error.error)?;
             }
         }
         Ok(())

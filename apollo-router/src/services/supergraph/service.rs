@@ -143,12 +143,11 @@ impl Service<SupergraphRequest> for SupergraphService {
                 ..Default::default()
             }];
 
-            Ok(SupergraphResponse::builder()
+            Ok(SupergraphResponse::infallible_builder()
                 .errors(errors)
                 .status_code(StatusCode::INTERNAL_SERVER_ERROR)
                 .context(context_cloned)
-                .build()
-                .expect("building a response like this should not fail"))
+                .build())
         });
 
         Box::pin(fut)
@@ -186,24 +185,22 @@ async fn service_call(
         Ok(resp) => resp,
         Err(err) => match err.into_graphql_errors() {
             Ok(gql_errors) => {
-                return Ok(SupergraphResponse::builder()
+                return Ok(SupergraphResponse::infallible_builder()
                     .context(context)
                     .errors(gql_errors)
                     .status_code(StatusCode::BAD_REQUEST) // If it's a graphql error we return a status code 400
-                    .build()
-                    .expect("this response build must not fail"));
+                    .build());
             }
             Err(err) => return Err(err.into()),
         },
     };
 
     if !errors.is_empty() {
-        return Ok(SupergraphResponse::builder()
+        return Ok(SupergraphResponse::infallible_builder()
             .context(context)
             .errors(errors)
             .status_code(StatusCode::BAD_REQUEST) // If it's a graphql error we return a status code 400
-            .build()
-            .expect("this response build must not fail"));
+            .build());
     }
 
     match content {
@@ -293,7 +290,7 @@ async fn service_call(
                     let query_plan = plan.clone();
                     let execution_service_factory_cloned = execution_service_factory.clone();
                     let cloned_supergraph_req =
-                        clone_supergraph_request(&req.supergraph_request, context.clone())?;
+                        clone_supergraph_request(&req.supergraph_request, context.clone());
                     // Spawn task for subscription
                     tokio::spawn(async move {
                         subscription_task(
@@ -474,7 +471,7 @@ async fn subscription_task(
                 // pick up the next one.
                 if let Some(conf) = new_configuration.upgrade() {
                     let plugins = match create_plugins(&conf, &execution_service_factory.schema, None, None).await {
-                        Ok(plugins) => plugins,
+                        Ok(plugins) => Arc::new(plugins),
                         Err(err) => {
                             tracing::error!("cannot re-create plugins with the new configuration (closing existing subscription): {err:?}");
                             break;
@@ -487,8 +484,13 @@ async fn subscription_task(
                             break;
                         },
                     };
-                    let plugins = Arc::new(IndexMap::from_iter(plugins));
-                    execution_service_factory = ExecutionServiceFactory { schema: execution_service_factory.schema.clone(), plugins: plugins.clone(), subgraph_service_factory: Arc::new(SubgraphServiceFactory::new(subgraph_services.into_iter().map(|(k, v)| (k, Arc::new(v) as Arc<dyn MakeSubgraphService>)).collect(), plugins.clone())) };
+
+                    execution_service_factory = ExecutionServiceFactory {
+                        schema: execution_service_factory.schema.clone(),
+                        plugins: plugins.clone(),
+                        subgraph_service_factory: Arc::new(SubgraphServiceFactory::new(subgraph_services.into_iter().map(|(k, v)| (k, Arc::new(v) as Arc<dyn MakeSubgraphService>)).collect(), plugins.clone())),
+
+                    };
                 }
             }
             Some(new_schema) = schema_updated_rx.next() => {
@@ -529,8 +531,7 @@ async fn dispatch_event(
             let cloned_supergraph_req = clone_supergraph_request(
                 &supergraph_req.supergraph_request,
                 supergraph_req.context.clone(),
-            )
-            .expect("it's a clone of the original one; qed");
+            );
             let execution_request = ExecutionRequest::internal_builder()
                 .supergraph_request(cloned_supergraph_req.supergraph_request)
                 .query_plan(query_plan.clone())
@@ -621,7 +622,7 @@ async fn plan_query(
 fn clone_supergraph_request(
     req: &http::Request<graphql::Request>,
     context: Context,
-) -> Result<SupergraphRequest, BoxError> {
+) -> SupergraphRequest {
     let mut cloned_supergraph_req = SupergraphRequest::builder()
         .extensions(req.body().extensions.clone())
         .and_query(req.body().query.clone())
@@ -637,7 +638,9 @@ fn clone_supergraph_request(
         }
     }
 
-    cloned_supergraph_req.build()
+    cloned_supergraph_req
+        .build()
+        .expect("cloning an existing supergraph response should not fail")
 }
 
 /// Builder which generates a plugin pipeline.
@@ -647,8 +650,8 @@ fn clone_supergraph_request(
 /// [`tower::util::BoxCloneService`] capable of processing a router request
 /// through the entire stack to return a response.
 pub(crate) struct PluggableSupergraphServiceBuilder {
-    plugins: Plugins,
-    subgraph_services: Vec<(String, Arc<dyn MakeSubgraphService>)>,
+    plugins: Arc<Plugins>,
+    subgraph_services: Vec<(String, Box<dyn MakeSubgraphService>)>,
     configuration: Option<Arc<Configuration>>,
     planner: BridgeQueryPlanner,
 }
@@ -656,19 +659,18 @@ pub(crate) struct PluggableSupergraphServiceBuilder {
 impl PluggableSupergraphServiceBuilder {
     pub(crate) fn new(planner: BridgeQueryPlanner) -> Self {
         Self {
-            plugins: Default::default(),
+            plugins: Arc::new(Default::default()),
             subgraph_services: Default::default(),
             configuration: None,
             planner,
         }
     }
 
-    pub(crate) fn with_dyn_plugin(
+    pub(crate) fn with_plugins(
         mut self,
-        plugin_name: String,
-        plugin: Box<dyn DynPlugin>,
+        plugins: Arc<Plugins>,
     ) -> PluggableSupergraphServiceBuilder {
-        self.plugins.insert(plugin_name, plugin);
+        self.plugins = plugins;
         self
     }
 
@@ -681,7 +683,7 @@ impl PluggableSupergraphServiceBuilder {
         S: MakeSubgraphService,
     {
         self.subgraph_services
-            .push((name.to_string(), Arc::new(service_maker)));
+            .push((name.to_string(), Box::new(service_maker)));
         self
     }
 
@@ -703,29 +705,37 @@ impl PluggableSupergraphServiceBuilder {
             &configuration,
             IndexMap::new(),
         )
-        .await;
+        .await?;
 
-        let mut plugins = self.plugins;
         // Activate the telemetry plugin.
         // We must NOT fail to go live with the new router from this point as the telemetry plugin activate interacts with globals.
-        for (_, plugin) in plugins.iter_mut() {
-            if let Some(telemetry) = plugin.as_any_mut().downcast_mut::<Telemetry>() {
+        for (_, plugin) in self.plugins.iter() {
+            if let Some(telemetry) = plugin.as_any().downcast_ref::<Telemetry>() {
                 telemetry.activate();
             }
         }
 
-        let plugins = Arc::new(plugins);
+        /*for (_, service) in self.subgraph_services.iter_mut() {
+            if let Some(subgraph) =
+                (service as &mut dyn std::any::Any).downcast_mut::<SubgraphService>()
+            {
+                subgraph.client_factory.plugins = plugins.clone();
+            }
+        }*/
 
         let subgraph_service_factory = Arc::new(SubgraphServiceFactory::new(
-            self.subgraph_services,
-            plugins.clone(),
+            self.subgraph_services
+                .into_iter()
+                .map(|(name, service)| (name, service.into()))
+                .collect(),
+            self.plugins.clone(),
         ));
 
         Ok(SupergraphCreator {
             query_planner_service,
             subgraph_service_factory,
             schema,
-            plugins,
+            plugins: self.plugins,
             config: configuration,
         })
     }

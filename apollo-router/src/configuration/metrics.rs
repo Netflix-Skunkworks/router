@@ -280,7 +280,7 @@ impl InstrumentData {
 
         populate_config_instrument!(
             apollo.router.config.entity_cache,
-            "$.experimental_entity_cache",
+            "$.preview_entity_cache",
             opt.enabled,
             "$[?(@.enabled)]",
             opt.subgraph.enabled,
@@ -328,6 +328,15 @@ impl InstrumentData {
             "$.experimental_batching[?(@.enabled == true)]",
             opt.mode,
             "$.mode"
+        );
+
+        populate_config_instrument!(
+            apollo.router.config.file_uploads.multipart,
+            "$.preview_file_uploads[?(@.enabled == true)].protocols.multipart[?(@.enabled == true)]",
+            opt.limits.max_file_size,
+            "$.limits.max_file_size",
+            opt.limits.max_files,
+            "$.limits.max_files"
         );
     }
 
@@ -399,7 +408,7 @@ impl From<InstrumentData> for Metrics {
                 .map(|(metric_name, (value, attributes))| {
                     let attributes: Vec<_> = attributes
                         .into_iter()
-                        .map(|(k, v)| KeyValue::new(k.replace("__", "."), v))
+                        .map(|(k, v)| KeyValue::new(k.trim_end_matches("__").replace("__", "."), v))
                         .collect();
                     data.meter
                         .u64_observable_gauge(metric_name)

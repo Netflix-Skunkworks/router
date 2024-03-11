@@ -42,6 +42,7 @@ async fn test_metrics_reloading() {
 
     router.assert_metrics_contains(r#"apollo_router_cache_hit_count_total{kind="query planner",storage="memory",otel_scope_name="apollo/router"} 4"#, None).await;
     router.assert_metrics_contains(r#"apollo_router_cache_miss_count_total{kind="query planner",storage="memory",otel_scope_name="apollo/router"} 2"#, None).await;
+    router.assert_metrics_contains(r#"apollo_router_http_request_duration_seconds_bucket{status="200",otel_scope_name="apollo/router",le="100"}"#, None).await;
     router
         .assert_metrics_contains(r#"apollo_router_cache_hit_time"#, None)
         .await;
@@ -134,10 +135,11 @@ async fn test_bad_queries() {
             None,
         )
         .await;
-    router.execute_bad_content_encoding().await;
+    router.execute_bad_content_type().await;
+
     router
             .assert_metrics_contains(
-                r#"apollo_router_http_requests_total{error="unknown content-encoding header value \"garbage\"",status="400",otel_scope_name="apollo/router"}"#,
+                r#"apollo_router_http_requests_total{error="'content-type' header must be one of: \"application/json\" or \"application/graphql-response+json\"",status="415",otel_scope_name="apollo/router"}"#,
                 None,
             )
             .await;

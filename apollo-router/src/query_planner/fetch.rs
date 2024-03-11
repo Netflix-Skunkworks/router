@@ -194,7 +194,6 @@ impl Variables {
             let representations = Value::Array(Vec::from_iter(values));
 
             variables.insert("representations", representations);
-
             Some(Variables {
                 variables,
                 inverted_paths,
@@ -236,7 +235,7 @@ impl FetchNode {
         parameters: &'a ExecutionParameters<'a>,
         data: &'a Value,
         current_dir: &'a Path,
-    ) -> Result<(Value, Vec<Error>), FetchError> {
+    ) -> (Value, Vec<Error>) {
         let FetchNode {
             operation,
             operation_kind,
@@ -260,7 +259,7 @@ impl FetchNode {
         ) {
             Some(variables) => variables,
             None => {
-                return Ok((Value::Object(Object::default()), Vec::new()));
+                return (Value::Object(Object::default()), Vec::new());
             }
         };
 
@@ -302,8 +301,7 @@ impl FetchNode {
             .create(service_name)
             .expect("we already checked that the service exists during planning; qed");
 
-        // TODO not sure if we need a RouterReponse here as we don't do anything with it
-        let (_parts, response) = service
+        let (_parts, response) = match service
             .oneshot(subgraph_request)
             .instrument(tracing::trace_span!("subfetch_stream"))
             .await
@@ -325,16 +323,26 @@ impl FetchNode {
                     service: service_name.to_string(),
                     reason: e.to_string(),
                 },
-            })?
-            .response
-            .into_parts();
+            }) {
+            Err(e) => {
+                return (
+                    Value::default(),
+                    vec![e.to_graphql_error(Some(current_dir.to_owned()))],
+                );
+            }
+            Ok(res) => res.response.into_parts(),
+        };
 
         super::log::trace_subfetch(service_name, operation, &variables, &response);
 
         if !response.is_primary() {
-            return Err(FetchError::SubrequestUnexpectedPatchResponse {
-                service: service_name.to_owned(),
-            });
+            return (
+                Value::default(),
+                vec![FetchError::SubrequestUnexpectedPatchResponse {
+                    service: service_name.to_owned(),
+                }
+                .to_graphql_error(Some(current_dir.to_owned()))],
+            );
         }
 
         let (value, errors) =
@@ -347,7 +355,7 @@ impl FetchNode {
                 }
             }
         }
-        Ok((value, errors))
+        (value, errors)
     }
 
     #[instrument(skip_all, level = "debug", name = "response_insert")]
@@ -445,11 +453,13 @@ impl FetchNode {
 
             (Value::Null, errors)
         } else {
-            let current_slice = if current_dir.last() == Some(&json_ext::PathElement::Flatten) {
-                &current_dir.0[..current_dir.0.len() - 1]
-            } else {
-                &current_dir.0[..]
-            };
+            // TODO[igni]
+            let current_slice =
+                if matches!(current_dir.last(), Some(&json_ext::PathElement::Flatten(_))) {
+                    &current_dir.0[..current_dir.0.len() - 1]
+                } else {
+                    &current_dir.0[..]
+                };
 
             let errors: Vec<Error> = response
                 .errors

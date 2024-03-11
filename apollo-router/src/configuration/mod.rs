@@ -191,6 +191,11 @@ pub struct Configuration {
     /// Batching configuration.
     #[serde(default)]
     pub(crate) experimental_batching: Batching,
+
+    /// Type conditioned fetching configuration.
+    /// If you don't know what this is about, you probably don't need it.
+    #[serde(default)]
+    pub(crate) experimental_type_conditioned_fetching: bool,
 }
 
 impl PartialEq for Configuration {
@@ -214,7 +219,7 @@ pub(crate) enum GraphQLValidationMode {
     Both,
 }
 
-/// GraphQL validation modes.
+/// API schema generation modes.
 #[derive(Clone, PartialEq, Eq, Default, Derivative, Serialize, Deserialize, JsonSchema)]
 #[derivative(Debug)]
 #[serde(rename_all = "lowercase")]
@@ -256,6 +261,7 @@ impl<'de> serde::Deserialize<'de> for Configuration {
             experimental_chaos: Chaos,
             experimental_graphql_validation_mode: GraphQLValidationMode,
             experimental_batching: Batching,
+            experimental_type_conditioned_fetching: bool,
         }
         let ad_hoc: AdHocConfiguration = serde::Deserialize::deserialize(deserializer)?;
 
@@ -275,6 +281,7 @@ impl<'de> serde::Deserialize<'de> for Configuration {
             .uplink(ad_hoc.uplink)
             .graphql_validation_mode(ad_hoc.experimental_graphql_validation_mode)
             .experimental_batching(ad_hoc.experimental_batching)
+            .experimental_type_conditioned_fetching(ad_hoc.experimental_type_conditioned_fetching)
             .build()
             .map_err(|e| serde::de::Error::custom(e.to_string()))
     }
@@ -313,6 +320,7 @@ impl Configuration {
         graphql_validation_mode: Option<GraphQLValidationMode>,
         experimental_api_schema_generation_mode: Option<ApiSchemaMode>,
         experimental_batching: Option<Batching>,
+        experimental_type_conditioned_fetching: Option<bool>,
     ) -> Result<Self, ConfigurationError> {
         #[cfg(not(test))]
         let notify_queue_cap = match apollo_plugins.get(APOLLO_SUBSCRIPTION_PLUGIN_NAME) {
@@ -354,6 +362,7 @@ impl Configuration {
             #[cfg(not(test))]
             notify: notify.map(|n| n.set_queue_size(notify_queue_cap))
                 .unwrap_or_else(|| Notify::builder().and_queue_size(notify_queue_cap).ttl(Duration::from_secs(HEARTBEAT_TIMEOUT_DURATION_SECONDS)).router_broadcasts(Arc::new(RouterBroadcasts::new())).heartbeat_error_message(graphql::Response::builder().errors(vec![graphql::Error::builder().message("the connection has been closed because it hasn't heartbeat for a while").extension_code("SUBSCRIPTION_HEARTBEAT_ERROR").build()]).build()).build()),
+            experimental_type_conditioned_fetching: experimental_type_conditioned_fetching.unwrap_or_default()
         };
 
         conf.validate()
@@ -389,6 +398,7 @@ impl Configuration {
         graphql_validation_mode: Option<GraphQLValidationMode>,
         experimental_batching: Option<Batching>,
         experimental_api_schema_generation_mode: Option<ApiSchemaMode>,
+        experimental_type_conditioned_fetching: Option<bool>,
     ) -> Result<Self, ConfigurationError> {
         let configuration = Self {
             validated_yaml: Default::default(),
@@ -414,6 +424,8 @@ impl Configuration {
             persisted_queries: persisted_query.unwrap_or_default(),
             uplink,
             experimental_batching: experimental_batching.unwrap_or_default(),
+            experimental_type_conditioned_fetching: experimental_type_conditioned_fetching
+                .unwrap_or_default(),
         };
 
         configuration.validate()
@@ -848,7 +860,7 @@ impl Default for Apq {
 #[serde(deny_unknown_fields, default)]
 pub(crate) struct QueryPlanning {
     /// Cache configuration
-    pub(crate) experimental_cache: Cache,
+    pub(crate) cache: Cache,
     /// Warms up the cache on reloads by running the query plan over
     /// a list of the most used queries (from the in memory cache)
     /// Configures the number of queries warmed up. Defaults to 1/3 of
@@ -934,6 +946,14 @@ pub(crate) struct RedisCache {
     #[serde(default)]
     /// TLS client configuration
     pub(crate) tls: Option<TlsClient>,
+
+    #[serde(default = "default_required_to_start")]
+    /// Prevents the router from starting if it cannot connect to Redis
+    pub(crate) required_to_start: bool,
+}
+
+fn default_required_to_start() -> bool {
+    false
 }
 
 /// TLS related configuration options.

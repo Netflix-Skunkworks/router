@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 use apollo_compiler::ast;
 use apollo_compiler::schema;
+use apollo_compiler::schema::Implementers;
 use apollo_compiler::schema::Name;
 use tower::BoxError;
 
@@ -30,7 +31,8 @@ pub(crate) struct PolicyExtractionVisitor<'a> {
 }
 
 pub(crate) const POLICY_DIRECTIVE_NAME: &str = "policy";
-pub(crate) const POLICY_SPEC_URL: &str = "https://specs.apollo.dev/policy/v0.1";
+pub(crate) const POLICY_SPEC_BASE_URL: &str = "https://specs.apollo.dev/policy";
+pub(crate) const POLICY_SPEC_VERSION_RANGE: &str = ">=0.1.0, <=0.1.0";
 
 impl<'a> PolicyExtractionVisitor<'a> {
     #[allow(dead_code)]
@@ -46,7 +48,8 @@ impl<'a> PolicyExtractionVisitor<'a> {
             extracted_policies: HashSet::new(),
             policy_directive_name: Schema::directive_name(
                 schema,
-                POLICY_SPEC_URL,
+                POLICY_SPEC_BASE_URL,
+                POLICY_SPEC_VERSION_RANGE,
                 POLICY_DIRECTIVE_NAME,
             )?,
         })
@@ -187,7 +190,7 @@ impl<'a> traverse::Visitor for PolicyExtractionVisitor<'a> {
 pub(crate) struct PolicyFilteringVisitor<'a> {
     schema: &'a schema::Schema,
     fragments: HashMap<&'a ast::Name, &'a ast::FragmentDefinition>,
-    implementers_map: &'a HashMap<Name, HashSet<Name>>,
+    implementers_map: &'a HashMap<Name, Implementers>,
     dry_run: bool,
     request_policies: HashSet<String>,
     pub(crate) query_requires_policies: bool,
@@ -222,7 +225,7 @@ impl<'a> PolicyFilteringVisitor<'a> {
     pub(crate) fn new(
         schema: &'a schema::Schema,
         executable: &'a ast::Document,
-        implementers_map: &'a HashMap<Name, HashSet<Name>>,
+        implementers_map: &'a HashMap<Name, Implementers>,
         successful_policies: HashSet<String>,
         dry_run: bool,
     ) -> Option<Self> {
@@ -238,7 +241,8 @@ impl<'a> PolicyFilteringVisitor<'a> {
             current_path: Path::default(),
             policy_directive_name: Schema::directive_name(
                 schema,
-                POLICY_SPEC_URL,
+                POLICY_SPEC_BASE_URL,
+                POLICY_SPEC_VERSION_RANGE,
                 POLICY_DIRECTIVE_NAME,
             )?,
         })
@@ -288,6 +292,14 @@ impl<'a> PolicyFilteringVisitor<'a> {
         }
     }
 
+    fn implementors(&self, type_name: &str) -> impl Iterator<Item = &Name> {
+        self.implementers_map
+            .get(type_name)
+            .map(|implementers| implementers.iter())
+            .into_iter()
+            .flatten()
+    }
+
     fn implementors_with_different_requirements(
         &self,
         field_def: &ast::FieldDefinition,
@@ -325,10 +337,7 @@ impl<'a> PolicyFilteringVisitor<'a> {
             let mut policies_sets: Option<Vec<Vec<String>>> = None;
 
             for ty in self
-                .implementers_map
-                .get(type_name)
-                .into_iter()
-                .flatten()
+                .implementors(type_name)
                 .filter_map(|ty| self.schema.types.get(ty))
             {
                 // aggregate the list of policies sets
@@ -373,7 +382,7 @@ impl<'a> PolicyFilteringVisitor<'a> {
             if t.is_interface() {
                 let mut policies_sets: Option<Vec<Vec<String>>> = None;
 
-                for ty in self.implementers_map.get(parent_type).into_iter().flatten() {
+                for ty in self.implementors(parent_type) {
                     if let Ok(f) = self.schema.type_field(ty, &field.name) {
                         // aggregate the list of policies sets
                         // we transform to a common representation of sorted vectors because the element order
@@ -471,8 +480,9 @@ impl<'a> transform::Visitor for PolicyFilteringVisitor<'a> {
 
         self.current_path
             .push(PathElement::Key(field_name.as_str().into()));
+        // TODO[igni]
         if is_field_list {
-            self.current_path.push(PathElement::Flatten);
+            self.current_path.push(PathElement::Flatten(None));
         }
 
         let res = if is_authorized

@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 use apollo_compiler::ast;
 use apollo_compiler::schema;
+use apollo_compiler::schema::Implementers;
 use apollo_compiler::schema::Name;
 use tower::BoxError;
 
@@ -30,7 +31,8 @@ pub(crate) struct ScopeExtractionVisitor<'a> {
 }
 
 pub(crate) const REQUIRES_SCOPES_DIRECTIVE_NAME: &str = "requiresScopes";
-pub(crate) const REQUIRES_SCOPES_SPEC_URL: &str = "https://specs.apollo.dev/requiresScopes/v0.1";
+pub(crate) const REQUIRES_SCOPES_SPEC_BASE_URL: &str = "https://specs.apollo.dev/requiresScopes";
+pub(crate) const REQUIRES_SCOPES_SPEC_VERSION_RANGE: &str = ">=0.1.0, <=0.1.0";
 
 impl<'a> ScopeExtractionVisitor<'a> {
     #[allow(dead_code)]
@@ -46,7 +48,8 @@ impl<'a> ScopeExtractionVisitor<'a> {
             extracted_scopes: HashSet::new(),
             requires_scopes_directive_name: Schema::directive_name(
                 schema,
-                REQUIRES_SCOPES_SPEC_URL,
+                REQUIRES_SCOPES_SPEC_BASE_URL,
+                REQUIRES_SCOPES_SPEC_VERSION_RANGE,
                 REQUIRES_SCOPES_DIRECTIVE_NAME,
             )?,
         })
@@ -204,7 +207,7 @@ fn scopes_sets_argument(directive: &ast::Directive) -> impl Iterator<Item = Hash
 pub(crate) struct ScopeFilteringVisitor<'a> {
     schema: &'a schema::Schema,
     fragments: HashMap<&'a ast::Name, &'a ast::FragmentDefinition>,
-    implementers_map: &'a HashMap<Name, HashSet<Name>>,
+    implementers_map: &'a HashMap<Name, Implementers>,
     request_scopes: HashSet<String>,
     pub(crate) query_requires_scopes: bool,
     pub(crate) unauthorized_paths: Vec<Path>,
@@ -220,7 +223,7 @@ impl<'a> ScopeFilteringVisitor<'a> {
     pub(crate) fn new(
         schema: &'a schema::Schema,
         executable: &'a ast::Document,
-        implementers_map: &'a HashMap<Name, HashSet<Name>>,
+        implementers_map: &'a HashMap<Name, Implementers>,
         scopes: HashSet<String>,
         dry_run: bool,
     ) -> Option<Self> {
@@ -236,7 +239,8 @@ impl<'a> ScopeFilteringVisitor<'a> {
             current_path: Path::default(),
             requires_scopes_directive_name: Schema::directive_name(
                 schema,
-                REQUIRES_SCOPES_SPEC_URL,
+                REQUIRES_SCOPES_SPEC_BASE_URL,
+                REQUIRES_SCOPES_SPEC_VERSION_RANGE,
                 REQUIRES_SCOPES_DIRECTIVE_NAME,
             )?,
         })
@@ -286,6 +290,14 @@ impl<'a> ScopeFilteringVisitor<'a> {
         }
     }
 
+    fn implementors(&self, type_name: &str) -> impl Iterator<Item = &Name> {
+        self.implementers_map
+            .get(type_name)
+            .map(|implementers| implementers.iter())
+            .into_iter()
+            .flatten()
+    }
+
     fn implementors_with_different_requirements(
         &self,
         field_def: &ast::FieldDefinition,
@@ -325,10 +337,7 @@ impl<'a> ScopeFilteringVisitor<'a> {
             let type_name = field_def.ty.inner_named_type();
 
             for ty in self
-                .implementers_map
-                .get(type_name)
-                .into_iter()
-                .flatten()
+                .implementors(type_name)
                 .filter_map(|ty| self.schema.types.get(ty))
             {
                 // aggregate the list of scope sets
@@ -373,7 +382,7 @@ impl<'a> ScopeFilteringVisitor<'a> {
             if t.is_interface() {
                 let mut scope_sets = None;
 
-                for ty in self.implementers_map.get(parent_type).into_iter().flatten() {
+                for ty in self.implementors(parent_type) {
                     if let Ok(f) = self.schema.type_field(ty, &field.name) {
                         // aggregate the list of scope sets
                         // we transform to a common representation of sorted vectors because the element order
@@ -470,11 +479,11 @@ impl<'a> transform::Visitor for ScopeFilteringVisitor<'a> {
 
         let implementors_with_different_field_requirements =
             self.implementors_with_different_field_requirements(parent_type, node);
-
+        // TODO[igni]
         self.current_path
             .push(PathElement::Key(field_name.as_str().into()));
         if is_field_list {
-            self.current_path.push(PathElement::Flatten);
+            self.current_path.push(PathElement::Flatten(None));
         }
 
         let res = if is_authorized

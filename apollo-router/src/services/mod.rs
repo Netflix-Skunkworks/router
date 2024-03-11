@@ -26,6 +26,7 @@ pub use self::router::service::set_transform_request_fn;
 
 pub mod execution;
 pub(crate) mod external;
+pub(crate) mod http;
 pub(crate) mod layers;
 pub(crate) mod new_service;
 pub(crate) mod query_planner;

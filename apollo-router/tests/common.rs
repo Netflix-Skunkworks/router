@@ -10,10 +10,14 @@ use std::time::SystemTime;
 
 use buildstructor::buildstructor;
 use http::header::ACCEPT;
-use http::header::CONTENT_ENCODING;
 use http::header::CONTENT_TYPE;
 use http::HeaderValue;
 use jsonpath_lib::Selector;
+use mediatype::names::BOUNDARY;
+use mediatype::names::FORM_DATA;
+use mediatype::names::MULTIPART;
+use mediatype::MediaType;
+use mediatype::WriteParams;
 use mime::APPLICATION_JSON;
 use once_cell::sync::OnceCell;
 use opentelemetry::global;
@@ -59,8 +63,12 @@ pub struct IntegrationTest {
     stdio_tx: tokio::sync::mpsc::Sender<String>,
     stdio_rx: tokio::sync::mpsc::Receiver<String>,
     collect_stdio: Option<(tokio::sync::oneshot::Sender<String>, regex::Regex)>,
+    supergraph: PathBuf,
     _subgraphs: wiremock::MockServer,
     subscriber: Option<Dispatch>,
+
+    _subgraph_overrides: HashMap<String, String>,
+    pub bind_addr: SocketAddr,
 }
 
 struct TracedResponder(pub(crate) ResponseTemplate);
@@ -101,6 +109,8 @@ impl IntegrationTest {
         telemetry: Option<Telemetry>,
         responder: Option<ResponseTemplate>,
         collect_stdio: Option<tokio::sync::oneshot::Sender<String>>,
+        supergraph: Option<PathBuf>,
+        mut subgraph_overrides: HashMap<String, String>,
     ) -> Self {
         // Prevent multiple integration tests from running at the same time
         let lock = LOCK
@@ -115,28 +125,28 @@ impl IntegrationTest {
         let address = listener.local_addr().unwrap();
         let url = format!("http://{address}/");
 
-        let mut config: Value = serde_yaml::from_str(config).unwrap();
-        match config
-            .as_object_mut()
-            .and_then(|o| o.get_mut("override_subgraph_url"))
-            .and_then(|o| o.as_object_mut())
-        {
-            None => {
-                if let Some(o) = config.as_object_mut() {
-                    o.insert(
-                        "override_subgraph_url".to_string(),
-                        json! {{ "products": url}},
-                    );
-                }
-            }
-            Some(override_url) => {
-                let url = format!("http://{address}");
-                override_url.insert("products".to_string(), url.into());
-            }
-        }
+        // Add a default override for products, if not specified
+        subgraph_overrides.entry("products".into()).or_insert(url);
 
-        let config_str = serde_yaml::to_string(&config).unwrap();
+        // Bind to a random port
+        // Note: This might still fail if a different process binds to the port found here
+        // before the router is started.
+        // Note: We need the nested scope so that the listener gets dropped once its address
+        // is resolved.
+        let addr = {
+            let bound = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).unwrap();
+            bound.local_addr().unwrap()
+        };
 
+        // Insert the overrides into the config
+        let config_str = merge_overrides(config, &subgraph_overrides, &addr);
+
+        let supergraph = supergraph.unwrap_or(PathBuf::from_iter([
+            "..",
+            "examples",
+            "graphql",
+            "local.graphql",
+        ]));
         let subgraphs = wiremock::MockServer::builder()
             .listener(listener)
             .start()
@@ -166,8 +176,11 @@ impl IntegrationTest {
             stdio_tx,
             stdio_rx,
             collect_stdio,
+            supergraph,
             _subgraphs: subgraphs,
             subscriber,
+            _subgraph_overrides: subgraph_overrides,
+            bind_addr: addr,
         }
     }
 
@@ -193,8 +206,7 @@ impl IntegrationTest {
                 "--config",
                 &self.test_config_location.to_string_lossy(),
                 "--supergraph",
-                &PathBuf::from_iter(["..", "examples", "graphql", "local.graphql"])
-                    .to_string_lossy(),
+                &self.supergraph.to_string_lossy(),
                 "--log",
                 "error,apollo_router=info",
             ])
@@ -340,9 +352,12 @@ impl IntegrationTest {
 
     #[allow(dead_code)]
     pub async fn update_config(&self, yaml: &str) {
-        tokio::fs::write(&self.test_config_location, yaml)
-            .await
-            .expect("must be able to write config");
+        tokio::fs::write(
+            &self.test_config_location,
+            &merge_overrides(yaml, &self._subgraph_overrides, &self.bind_addr),
+        )
+        .await
+        .expect("must be able to write config");
     }
 
     #[allow(dead_code)]
@@ -378,7 +393,7 @@ impl IntegrationTest {
     }
 
     #[allow(dead_code)]
-    pub fn execute_bad_content_encoding(
+    pub fn execute_bad_content_type(
         &self,
     ) -> impl std::future::Future<Output = (String, reqwest::Response)> {
         self.execute_query_internal(&json!({"garbage":{}}), Some("garbage"))
@@ -387,7 +402,7 @@ impl IntegrationTest {
     fn execute_query_internal(
         &self,
         query: &Value,
-        content_encoding: Option<&'static str>,
+        content_type: Option<&'static str>,
     ) -> impl std::future::Future<Output = (String, reqwest::Response)> {
         assert!(
             self.router.is_some(),
@@ -395,6 +410,8 @@ impl IntegrationTest {
         );
         let dispatch = self.subscriber.clone();
         let query = query.clone();
+        let url = format!("http://{}", self.bind_addr);
+
         async move {
             let span = info_span!("client_request");
             let span_id = span.context().span().span_context().trace_id().to_string();
@@ -403,9 +420,11 @@ impl IntegrationTest {
                 let client = reqwest::Client::new();
 
                 let mut request = client
-                    .post("http://localhost:4000")
-                    .header(CONTENT_TYPE, APPLICATION_JSON.essence_str())
-                    .header(CONTENT_ENCODING, content_encoding.unwrap_or("identity"))
+                    .post(url)
+                    .header(
+                        CONTENT_TYPE,
+                        content_type.unwrap_or(APPLICATION_JSON.essence_str()),
+                    )
                     .header("apollographql-client-name", "custom_name")
                     .header("apollographql-client-version", "1.0")
                     .header("x-my-header", "test")
@@ -443,12 +462,13 @@ impl IntegrationTest {
         );
         let query = query.clone();
         let dispatch = self.subscriber.clone();
+        let url = format!("http://{}", self.bind_addr);
 
         async move {
             let client = reqwest::Client::new();
 
             let mut request = client
-                .post("http://localhost:4000")
+                .post(url)
                 .header(CONTENT_TYPE, APPLICATION_JSON.essence_str())
                 .header("apollographql-client-name", "custom_name")
                 .header("apollographql-client-version", "1.0")
@@ -477,6 +497,66 @@ impl IntegrationTest {
         .with_subscriber(dispatch.unwrap_or_default())
     }
 
+    /// Make a raw multipart request to the router.
+    #[allow(dead_code)]
+    pub fn execute_multipart_request(
+        &self,
+        request: reqwest::multipart::Form,
+        transform: Option<fn(reqwest::Request) -> reqwest::Request>,
+    ) -> impl std::future::Future<Output = (String, reqwest::Response)> {
+        assert!(
+            self.router.is_some(),
+            "router was not started, call `router.start().await; router.assert_started().await`"
+        );
+
+        let dispatch = self.subscriber.clone();
+        let url = format!("http://{}", self.bind_addr);
+        async move {
+            let span = info_span!("client_raw_request");
+            let span_id = span.context().span().span_context().trace_id().to_string();
+
+            async move {
+                let client = reqwest::Client::new();
+                let mime = {
+                    let mut m = MediaType::new(MULTIPART, FORM_DATA);
+                    m.set_param(BOUNDARY, mediatype::Value::new(request.boundary()).unwrap());
+
+                    m
+                };
+
+                let mut request = client
+                    .post(url)
+                    .header(CONTENT_TYPE, mime.to_string())
+                    .header("apollographql-client-name", "custom_name")
+                    .header("apollographql-client-version", "1.0")
+                    .header("x-my-header", "test")
+                    .multipart(request)
+                    .build()
+                    .unwrap();
+
+                // Optionally transform the request if needed
+                let transformer = transform.unwrap_or(core::convert::identity);
+
+                global::get_text_map_propagator(|propagator| {
+                    propagator.inject_context(
+                        &tracing::span::Span::current().context(),
+                        &mut opentelemetry_http::HeaderInjector(request.headers_mut()),
+                    );
+                });
+                request.headers_mut().remove(ACCEPT);
+                match client.execute(transformer(request)).await {
+                    Ok(response) => (span_id, response),
+                    Err(err) => {
+                        panic!("unable to send successful request to router, {err}")
+                    }
+                }
+            }
+            .instrument(span)
+            .await
+        }
+        .with_subscriber(dispatch.unwrap_or_default())
+    }
+
     #[allow(dead_code)]
     pub async fn run_subscription(&self, subscription: &str) -> (String, reqwest::Response) {
         assert!(
@@ -489,7 +569,7 @@ impl IntegrationTest {
         let _span_guard = span.enter();
 
         let mut request = client
-            .post("http://localhost:4000")
+            .post(format!("http://{}", self.bind_addr))
             .header(CONTENT_TYPE, APPLICATION_JSON.essence_str())
             .header(ACCEPT, "multipart/mixed;subscriptionSpec=1.0")
             .header("apollographql-client-name", "custom_name")
@@ -518,7 +598,7 @@ impl IntegrationTest {
         let client = reqwest::Client::new();
 
         let request = client
-            .get("http://localhost:4000/metrics")
+            .get(format!("http://{}/metrics", self.bind_addr))
             .header("apollographql-client-name", "custom_name")
             .header("apollographql-client-version", "1.0")
             .build()
@@ -582,7 +662,7 @@ impl IntegrationTest {
     #[allow(dead_code)]
     pub async fn assert_log_contains(&mut self, msg: &str) {
         let now = Instant::now();
-        while now.elapsed() < Duration::from_secs(5) {
+        while now.elapsed() < Duration::from_secs(10) {
             if let Ok(line) = self.stdio_rx.try_recv() {
                 if line.contains(msg) {
                     return;
@@ -722,4 +802,82 @@ impl ValueExt for Value {
     fn as_string(&self) -> Option<String> {
         self.as_str().map(|s| s.to_string())
     }
+}
+
+/// Merge in overrides to a yaml config.
+///
+/// The test harness needs some options to be present for it to work, so this
+/// function allows patching any config to include the needed values.
+fn merge_overrides(
+    yaml: &str,
+    subgraph_overrides: &HashMap<String, String>,
+    bind_addr: &SocketAddr,
+) -> String {
+    // Parse the config as yaml
+    let mut config: Value = serde_yaml::from_str(yaml).unwrap();
+
+    // Insert subgraph overrides, making sure to keep other overrides if present
+    let overrides = subgraph_overrides
+        .iter()
+        .map(|(name, url)| (name.clone(), serde_json::Value::String(url.clone())));
+    match config
+        .as_object_mut()
+        .and_then(|o| o.get_mut("override_subgraph_url"))
+        .and_then(|o| o.as_object_mut())
+    {
+        None => {
+            if let Some(o) = config.as_object_mut() {
+                o.insert("override_subgraph_url".to_string(), overrides.collect());
+            }
+        }
+        Some(override_url) => {
+            override_url.extend(overrides);
+        }
+    }
+
+    // Override the listening address always since we spawn the router on a
+    // random port.
+    match config
+        .as_object_mut()
+        .and_then(|o| o.get_mut("supergraph"))
+        .and_then(|o| o.as_object_mut())
+    {
+        None => {
+            if let Some(o) = config.as_object_mut() {
+                o.insert(
+                    "supergraph".to_string(),
+                    serde_json::json!({
+                        "listen": bind_addr.to_string(),
+                    }),
+                );
+            }
+        }
+        Some(supergraph_conf) => {
+            supergraph_conf.insert(
+                "listen".to_string(),
+                serde_json::Value::String(bind_addr.to_string()),
+            );
+        }
+    }
+
+    // Override the metrics listening address always since we spawn the router on a
+    // random port.
+    if let Some(prom_config) = config
+        .as_object_mut()
+        .and_then(|o| o.get_mut("telemetry"))
+        .and_then(|o| o.as_object_mut())
+        .and_then(|o| o.get_mut("exporters"))
+        .and_then(|o| o.as_object_mut())
+        .and_then(|o| o.get_mut("metrics"))
+        .and_then(|o| o.as_object_mut())
+        .and_then(|o| o.get_mut("prometheus"))
+        .and_then(|o| o.as_object_mut())
+    {
+        prom_config.insert(
+            "listen".to_string(),
+            serde_json::Value::String(bind_addr.to_string()),
+        );
+    }
+
+    serde_yaml::to_string(&config).unwrap()
 }

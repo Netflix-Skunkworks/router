@@ -265,7 +265,8 @@ impl Selection {
                     false
                 }
             }
-            (Some(PathElement::Index(_)), _) | (Some(PathElement::Flatten), _) => {
+            // TODO
+            (Some(PathElement::Index(_)), _) | (Some(PathElement::Flatten(_)), _) => {
                 self.contains_error_path(&path[1..], fragments)
             }
             (Some(PathElement::Key(_)), Selection::InlineFragment { selection_set, .. }) => {

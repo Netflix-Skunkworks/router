@@ -93,6 +93,11 @@ expression: "&schema"
                       "type": "string",
                       "nullable": true
                     },
+                    "required_to_start": {
+                      "description": "Prevents the router from starting if it cannot connect to Redis",
+                      "default": false,
+                      "type": "boolean"
+                    },
                     "timeout": {
                       "description": "Redis request timeout (default: 2ms)",
                       "default": null,
@@ -259,6 +264,29 @@ expression: "&schema"
                         },
                         "nullable": true
                       },
+                      "headers": {
+                        "description": "List of headers to add to the JWKS request",
+                        "type": "array",
+                        "items": {
+                          "description": "Insert a header",
+                          "type": "object",
+                          "required": [
+                            "name",
+                            "value"
+                          ],
+                          "properties": {
+                            "name": {
+                              "description": "The name of the header",
+                              "type": "string"
+                            },
+                            "value": {
+                              "description": "The value for the header",
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
                       "issuer": {
                         "description": "Expected issuer for tokens verified by that JWKS",
                         "type": "string",
@@ -278,6 +306,59 @@ expression: "&schema"
                       }
                     },
                     "additionalProperties": false
+                  }
+                },
+                "sources": {
+                  "description": "Alternative sources to extract the JWT",
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "required": [
+                          "type"
+                        ],
+                        "properties": {
+                          "name": {
+                            "description": "HTTP header expected to contain JWT",
+                            "default": "authorization",
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "header"
+                            ]
+                          },
+                          "value_prefix": {
+                            "description": "Header value prefix",
+                            "default": "Bearer",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "type"
+                        ],
+                        "properties": {
+                          "name": {
+                            "description": "Name of the cookie containing the JWT",
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "cookie"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 }
               },
@@ -1309,149 +1390,6 @@ expression: "&schema"
       },
       "additionalProperties": false
     },
-    "experimental_entity_cache": {
-      "description": "Configuration for entity caching",
-      "type": "object",
-      "required": [
-        "redis"
-      ],
-      "properties": {
-        "enabled": {
-          "description": "activates caching for all subgraphs, unless overriden in subgraph specific configuration",
-          "default": null,
-          "type": "boolean",
-          "nullable": true
-        },
-        "metrics": {
-          "description": "Entity caching evaluation metrics",
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "description": "enables metrics evaluating the benefits of entity caching",
-              "default": false,
-              "type": "boolean"
-            },
-            "separate_per_type": {
-              "description": "Adds the entity type name to attributes. This can greatly increase the cardinality",
-              "default": false,
-              "type": "boolean"
-            },
-            "ttl": {
-              "description": "Metrics counter TTL",
-              "type": "string",
-              "nullable": true
-            }
-          },
-          "additionalProperties": false
-        },
-        "redis": {
-          "description": "Redis cache configuration",
-          "type": "object",
-          "required": [
-            "urls"
-          ],
-          "properties": {
-            "namespace": {
-              "description": "namespace used to prefix Redis keys",
-              "type": "string",
-              "nullable": true
-            },
-            "password": {
-              "description": "Redis password if not provided in the URLs. This field takes precedence over the password in the URL",
-              "type": "string",
-              "nullable": true
-            },
-            "timeout": {
-              "description": "Redis request timeout (default: 2ms)",
-              "default": null,
-              "type": "string",
-              "nullable": true
-            },
-            "tls": {
-              "description": "TLS client configuration",
-              "default": null,
-              "type": "object",
-              "properties": {
-                "certificate_authorities": {
-                  "description": "list of certificate authorities in PEM format",
-                  "default": null,
-                  "type": "string",
-                  "nullable": true
-                },
-                "client_authentication": {
-                  "description": "client certificate authentication",
-                  "default": null,
-                  "type": "object",
-                  "required": [
-                    "certificate_chain",
-                    "key"
-                  ],
-                  "properties": {
-                    "certificate_chain": {
-                      "description": "list of certificates in PEM format",
-                      "writeOnly": true,
-                      "type": "string"
-                    },
-                    "key": {
-                      "description": "key in PEM format",
-                      "writeOnly": true,
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "nullable": true
-                }
-              },
-              "additionalProperties": false,
-              "nullable": true
-            },
-            "ttl": {
-              "description": "TTL for entries",
-              "default": null,
-              "type": "string",
-              "nullable": true
-            },
-            "urls": {
-              "description": "List of URLs to the Redis cluster",
-              "type": "array",
-              "items": {
-                "type": "string",
-                "format": "uri"
-              }
-            },
-            "username": {
-              "description": "Redis username if not provided in the URLs. This field takes precedence over the username in the URL",
-              "type": "string",
-              "nullable": true
-            }
-          },
-          "additionalProperties": false
-        },
-        "subgraphs": {
-          "description": "Per subgraph configuration",
-          "type": "object",
-          "additionalProperties": {
-            "description": "Per subgraph configuration for entity caching",
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "description": "activates caching for this subgraph, overrides the global configuration",
-                "default": null,
-                "type": "boolean",
-                "nullable": true
-              },
-              "ttl": {
-                "description": "expiration for all keys",
-                "type": "string",
-                "nullable": true
-              }
-            },
-            "additionalProperties": false
-          }
-        }
-      },
-      "additionalProperties": false
-    },
     "experimental_graphql_validation_mode": {
       "description": "Set the GraphQL validation implementation to use.",
       "default": "both",
@@ -1478,6 +1416,11 @@ expression: "&schema"
           ]
         }
       ]
+    },
+    "experimental_type_conditioned_fetching": {
+      "description": "Type conditioned fetching configuration. If you don't know what this is about, you probably don't need it.",
+      "default": false,
+      "type": "boolean"
     },
     "forbid_mutations": {
       "description": "Forbid mutations configuration",
@@ -2164,6 +2107,228 @@ expression: "&schema"
       },
       "additionalProperties": false
     },
+    "preview_entity_cache": {
+      "description": "Configuration for entity caching",
+      "type": "object",
+      "required": [
+        "redis"
+      ],
+      "properties": {
+        "enabled": {
+          "description": "activates caching for all subgraphs, unless overriden in subgraph specific configuration",
+          "default": null,
+          "type": "boolean",
+          "nullable": true
+        },
+        "metrics": {
+          "description": "Entity caching evaluation metrics",
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "description": "enables metrics evaluating the benefits of entity caching",
+              "default": false,
+              "type": "boolean"
+            },
+            "separate_per_type": {
+              "description": "Adds the entity type name to attributes. This can greatly increase the cardinality",
+              "default": false,
+              "type": "boolean"
+            },
+            "ttl": {
+              "description": "Metrics counter TTL",
+              "type": "string",
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "redis": {
+          "description": "Redis cache configuration",
+          "type": "object",
+          "required": [
+            "urls"
+          ],
+          "properties": {
+            "namespace": {
+              "description": "namespace used to prefix Redis keys",
+              "type": "string",
+              "nullable": true
+            },
+            "password": {
+              "description": "Redis password if not provided in the URLs. This field takes precedence over the password in the URL",
+              "type": "string",
+              "nullable": true
+            },
+            "required_to_start": {
+              "description": "Prevents the router from starting if it cannot connect to Redis",
+              "default": false,
+              "type": "boolean"
+            },
+            "timeout": {
+              "description": "Redis request timeout (default: 2ms)",
+              "default": null,
+              "type": "string",
+              "nullable": true
+            },
+            "tls": {
+              "description": "TLS client configuration",
+              "default": null,
+              "type": "object",
+              "properties": {
+                "certificate_authorities": {
+                  "description": "list of certificate authorities in PEM format",
+                  "default": null,
+                  "type": "string",
+                  "nullable": true
+                },
+                "client_authentication": {
+                  "description": "client certificate authentication",
+                  "default": null,
+                  "type": "object",
+                  "required": [
+                    "certificate_chain",
+                    "key"
+                  ],
+                  "properties": {
+                    "certificate_chain": {
+                      "description": "list of certificates in PEM format",
+                      "writeOnly": true,
+                      "type": "string"
+                    },
+                    "key": {
+                      "description": "key in PEM format",
+                      "writeOnly": true,
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "nullable": true
+                }
+              },
+              "additionalProperties": false,
+              "nullable": true
+            },
+            "ttl": {
+              "description": "TTL for entries",
+              "default": null,
+              "type": "string",
+              "nullable": true
+            },
+            "urls": {
+              "description": "List of URLs to the Redis cluster",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uri"
+              }
+            },
+            "username": {
+              "description": "Redis username if not provided in the URLs. This field takes precedence over the username in the URL",
+              "type": "string",
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "subgraphs": {
+          "description": "Per subgraph configuration",
+          "type": "object",
+          "additionalProperties": {
+            "description": "Per subgraph configuration for entity caching",
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "description": "activates caching for this subgraph, overrides the global configuration",
+                "default": null,
+                "type": "boolean",
+                "nullable": true
+              },
+              "ttl": {
+                "description": "expiration for all keys",
+                "type": "string",
+                "nullable": true
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "preview_file_uploads": {
+      "description": "Configuration for File Uploads plugin",
+      "type": "object",
+      "required": [
+        "enabled",
+        "protocols"
+      ],
+      "properties": {
+        "enabled": {
+          "description": "Whether the file upload plugin should be enabled (default: false)",
+          "type": "boolean"
+        },
+        "protocols": {
+          "description": "Supported protocol configurations for file uploads",
+          "type": "object",
+          "required": [
+            "multipart"
+          ],
+          "properties": {
+            "multipart": {
+              "description": "Configuration for multipart requests.\n\nThis protocol conforms to [jaydenseric's multipart spec](https://github.com/jaydenseric/graphql-multipart-request-spec)",
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "description": "Whether to enable the multipart protocol for file uploads (default: true)",
+                  "default": true,
+                  "type": "boolean"
+                },
+                "limits": {
+                  "description": "Resource limits for multipart requests",
+                  "type": "object",
+                  "required": [
+                    "max_file_size",
+                    "max_files"
+                  ],
+                  "properties": {
+                    "max_file_size": {
+                      "description": "The maximum size of each file, in bytes (default: 5MB)",
+                      "type": "string"
+                    },
+                    "max_files": {
+                      "description": "The maximum amount of files allowed for a single query (default: 4)",
+                      "type": "integer",
+                      "format": "uint",
+                      "minimum": 0.0
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "mode": {
+                  "description": "The supported mode for the request (default: [MultipartRequestMode::Stream])",
+                  "oneOf": [
+                    {
+                      "description": "The multipart request will not be loaded into memory and instead will be streamed directly to the subgraph in the order received. This has some limitations, mainly that the query _must_ be able to be streamed directly to the subgraph without buffering.\n\nIn practice, this means that certain queries will fail due to ordering of the files.",
+                      "type": "string",
+                      "enum": [
+                        "stream"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "progressive_override": {
+      "description": "Configuration for the progressive override plugin",
+      "type": "object"
+    },
     "rhai": {
       "description": "Configuration for the Rhai Plugin",
       "type": "object",
@@ -2368,7 +2533,7 @@ expression: "&schema"
         "experimental_reuse_query_fragments": null,
         "defer_support": true,
         "query_planning": {
-          "experimental_cache": {
+          "cache": {
             "in_memory": {
               "limit": 512
             },
@@ -2419,7 +2584,7 @@ expression: "&schema"
         "query_planning": {
           "description": "Query planning options",
           "default": {
-            "experimental_cache": {
+            "cache": {
               "in_memory": {
                 "limit": 512
               },
@@ -2431,7 +2596,7 @@ expression: "&schema"
           },
           "type": "object",
           "properties": {
-            "experimental_cache": {
+            "cache": {
               "description": "Cache configuration",
               "default": {
                 "in_memory": {
@@ -2477,6 +2642,11 @@ expression: "&schema"
                       "description": "Redis password if not provided in the URLs. This field takes precedence over the password in the URL",
                       "type": "string",
                       "nullable": true
+                    },
+                    "required_to_start": {
+                      "description": "Prevents the router from starting if it cannot connect to Redis",
+                      "default": false,
+                      "type": "boolean"
                     },
                     "timeout": {
                       "description": "Redis request timeout (default: 2ms)",
@@ -3202,6 +3372,173 @@ expression: "&schema"
                         }
                       },
                       "additionalProperties": false
+                    },
+                    "tty_format": {
+                      "description": "The format to log to stdout when you're running on an interactive terminal. When configured it will automatically use this `tty_format`` instead of the original `format` when an interactive terminal is detected",
+                      "oneOf": [
+                        {
+                          "description": "Tracing subscriber https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/format/struct.Json.html",
+                          "type": "object",
+                          "required": [
+                            "json"
+                          ],
+                          "properties": {
+                            "json": {
+                              "type": "object",
+                              "properties": {
+                                "display_current_span": {
+                                  "description": "Include the current span in this log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_filename": {
+                                  "description": "Include the filename with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_level": {
+                                  "description": "Include the level with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_line_number": {
+                                  "description": "Include the line number with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_resource": {
+                                  "description": "Include the resource with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_span_list": {
+                                  "description": "Include all of the containing span information with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_target": {
+                                  "description": "Include the target with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_thread_id": {
+                                  "description": "Include the thread_id with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_thread_name": {
+                                  "description": "Include the thread_name with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_timestamp": {
+                                  "description": "Include the timestamp with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "Tracing subscriber https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/format/struct.Json.html",
+                          "type": "string",
+                          "enum": [
+                            "json"
+                          ]
+                        },
+                        {
+                          "description": "Tracing subscriber https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/format/struct.Full.html",
+                          "type": "object",
+                          "required": [
+                            "text"
+                          ],
+                          "properties": {
+                            "text": {
+                              "type": "object",
+                              "properties": {
+                                "ansi_escape_codes": {
+                                  "description": "Process ansi escapes (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_current_span": {
+                                  "description": "Include the current span in this log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_filename": {
+                                  "description": "Include the filename with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_level": {
+                                  "description": "Include the level with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_line_number": {
+                                  "description": "Include the line number with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_resource": {
+                                  "description": "Include the resource with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_service_name": {
+                                  "description": "Include the service name with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_service_namespace": {
+                                  "description": "Include the service namespace with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_span_list": {
+                                  "description": "Include all of the containing span information with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                },
+                                "display_target": {
+                                  "description": "Include the target with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_thread_id": {
+                                  "description": "Include the thread_id with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_thread_name": {
+                                  "description": "Include the thread_name with the log event.",
+                                  "default": false,
+                                  "type": "boolean"
+                                },
+                                "display_timestamp": {
+                                  "description": "Include the timestamp with the log event. (default: true)",
+                                  "default": true,
+                                  "type": "boolean"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "description": "Tracing subscriber https://docs.rs/tracing-subscriber/latest/tracing_subscriber/fmt/format/struct.Full.html",
+                          "type": "string",
+                          "enum": [
+                            "text"
+                          ]
+                        }
+                      ],
+                      "nullable": true
                     }
                   },
                   "additionalProperties": false
@@ -5159,7 +5496,7 @@ expression: "&schema"
                       "additionalProperties": false
                     },
                     "buckets": {
-                      "description": "Custom buckets for histograms",
+                      "description": "Custom buckets for all histograms",
                       "default": [
                         0.001,
                         0.005,
@@ -5253,6 +5590,74 @@ expression: "&schema"
                       "default": null,
                       "type": "string",
                       "nullable": true
+                    },
+                    "views": {
+                      "description": "Views applied on metrics",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name"
+                        ],
+                        "properties": {
+                          "aggregation": {
+                            "description": "New aggregation settings to set",
+                            "oneOf": [
+                              {
+                                "description": "An aggregation that summarizes a set of measurements as an histogram with explicitly defined buckets.",
+                                "type": "object",
+                                "required": [
+                                  "histogram"
+                                ],
+                                "properties": {
+                                  "histogram": {
+                                    "type": "object",
+                                    "required": [
+                                      "buckets"
+                                    ],
+                                    "properties": {
+                                      "buckets": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "number",
+                                          "format": "double"
+                                        }
+                                      }
+                                    },
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            ],
+                            "nullable": true
+                          },
+                          "allowed_attribute_keys": {
+                            "description": "An allow-list of attribute keys that will be preserved for the instrument.\n\nAny attribute recorded for the instrument with a key not in this set will be dropped. If the set is empty, all attributes will be dropped, if `None` all attributes will be kept.",
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "uniqueItems": true,
+                            "nullable": true
+                          },
+                          "description": {
+                            "description": "New description to set to the instrument",
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "name": {
+                            "description": "The instrument name you're targeting",
+                            "type": "string"
+                          },
+                          "unit": {
+                            "description": "New unit to set to the instrument",
+                            "type": "string",
+                            "nullable": true
+                          }
+                        },
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "additionalProperties": false
@@ -6180,6 +6585,12 @@ expression: "&schema"
                       "description": "Custom attributes that are attached to the router span.",
                       "type": "object",
                       "properties": {
+                        "baggage": {
+                          "description": "All key values from trace baggage.",
+                          "default": null,
+                          "type": "boolean",
+                          "nullable": true
+                        },
                         "dd.trace_id": {
                           "description": "The datadog trace ID. This can be output in logs and used to correlate traces in Datadog.",
                           "default": null,
@@ -6683,6 +7094,9 @@ expression: "&schema"
                               }
                             },
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "string"
                           }
                         ]
                       }
@@ -6878,6 +7292,7 @@ expression: "&schema"
                             "additionalProperties": false
                           },
                           {
+                            "description": "Deprecated, use SubgraphResponseData and SubgraphResponseError instead",
                             "type": "object",
                             "required": [
                               "subgraph_response_body"
@@ -6943,6 +7358,150 @@ expression: "&schema"
                                 "nullable": true
                               },
                               "subgraph_response_body": {
+                                "description": "The subgraph response body json path.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "subgraph_response_data"
+                            ],
+                            "properties": {
+                              "default": {
+                                "description": "Optional default value.",
+                                "anyOf": [
+                                  {
+                                    "description": "bool values",
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "description": "i64 values",
+                                    "type": "integer",
+                                    "format": "int64"
+                                  },
+                                  {
+                                    "description": "f64 values",
+                                    "type": "number",
+                                    "format": "double"
+                                  },
+                                  {
+                                    "description": "String values",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Array of homogeneous values",
+                                    "anyOf": [
+                                      {
+                                        "description": "Array of bools",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      {
+                                        "description": "Array of integers",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "integer",
+                                          "format": "int64"
+                                        }
+                                      },
+                                      {
+                                        "description": "Array of floats",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "number",
+                                          "format": "double"
+                                        }
+                                      },
+                                      {
+                                        "description": "Array of strings",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ],
+                                "nullable": true
+                              },
+                              "subgraph_response_data": {
+                                "description": "The subgraph response body json path.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "required": [
+                              "subgraph_response_errors"
+                            ],
+                            "properties": {
+                              "default": {
+                                "description": "Optional default value.",
+                                "anyOf": [
+                                  {
+                                    "description": "bool values",
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "description": "i64 values",
+                                    "type": "integer",
+                                    "format": "int64"
+                                  },
+                                  {
+                                    "description": "f64 values",
+                                    "type": "number",
+                                    "format": "double"
+                                  },
+                                  {
+                                    "description": "String values",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "description": "Array of homogeneous values",
+                                    "anyOf": [
+                                      {
+                                        "description": "Array of bools",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "boolean"
+                                        }
+                                      },
+                                      {
+                                        "description": "Array of integers",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "integer",
+                                          "format": "int64"
+                                        }
+                                      },
+                                      {
+                                        "description": "Array of floats",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "number",
+                                          "format": "double"
+                                        }
+                                      },
+                                      {
+                                        "description": "Array of strings",
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ],
+                                "nullable": true
+                              },
+                              "subgraph_response_errors": {
                                 "description": "The subgraph response body json path.",
                                 "type": "string"
                               }
@@ -7416,6 +7975,9 @@ expression: "&schema"
                               }
                             },
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "string"
                           }
                         ]
                       }
@@ -7881,6 +8443,9 @@ expression: "&schema"
                               }
                             },
                             "additionalProperties": false
+                          },
+                          {
+                            "type": "string"
                           }
                         ]
                       }
