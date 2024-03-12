@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -112,7 +113,7 @@ impl RouterSuperServiceFactory for OrbiterRouterSuperServiceFactory {
             .map(|factory| {
                 // TODO: We should have a way to access the original CLI args here so that we can just see what the
                 // value of `anonymous_telemetry_disabled` really is instead of parsing it twice.
-                let telemetry_disabled = Opt::parse().is_telemetry_disabled();
+                let telemetry_disabled = env::var("APOLLO_TELEMETRY_DISABLED").unwrap_or_default() == "true";
                 if !telemetry_disabled {
                     let schema = factory.supergraph_creator.schema();
 
