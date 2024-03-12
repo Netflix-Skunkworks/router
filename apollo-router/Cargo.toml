@@ -184,7 +184,7 @@ reqwest = { version = "0.11.23", default-features = false, features = [
     "stream",
 ] }
 # note: this dependency should _always_ be pinned, prefix the version with an `=`
-router-bridge = "=0.5.16+v2.7.1"
+router-bridge = { version = "=0.5.16+v2.7.1", git = "https://github.com/xuorig/federation-rs", branch = "worker-planner-pool" }
 rust-embed = "8.1.0"
 rustls = "0.21.10"
 rustls-pemfile = "1.0.4"

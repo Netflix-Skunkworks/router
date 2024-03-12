@@ -27,7 +27,7 @@ use http_body::Body as _;
 use hyper::Body;
 use mime::APPLICATION_JSON;
 use multimap::MultiMap;
-use router_bridge::planner::Planner;
+use router_bridge::planner::PooledPlanner;
 use tower::BoxError;
 use tower::Layer;
 use tower::ServiceBuilder;
@@ -809,7 +809,7 @@ impl RouterCreator {
         self.supergraph_creator.cache_keys(count).await
     }
 
-    pub(crate) fn planner(&self) -> Arc<Planner<QueryPlanResult>> {
+    pub(crate) fn planner(&self) -> Arc<PooledPlanner<QueryPlanResult>> {
         self.supergraph_creator.planner()
     }
 }

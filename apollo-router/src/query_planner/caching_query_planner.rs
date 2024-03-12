@@ -8,7 +8,7 @@ use indexmap::IndexMap;
 use query_planner::QueryPlannerPlugin;
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use router_bridge::planner::Planner;
+use router_bridge::planner::PooledPlanner;
 use router_bridge::planner::UsageReporting;
 use sha2::Digest;
 use sha2::Sha256;
@@ -221,7 +221,7 @@ where
 }
 
 impl CachingQueryPlanner<BridgeQueryPlanner> {
-    pub(crate) fn planner(&self) -> Arc<Planner<QueryPlanResult>> {
+    pub(crate) fn planner(&self) -> Arc<PooledPlanner<QueryPlanResult>> {
         self.delegate.planner()
     }
 }

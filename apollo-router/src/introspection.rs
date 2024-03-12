@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use router_bridge::introspect::IntrospectionError;
-use router_bridge::planner::Planner;
+use router_bridge::planner::PooledPlanner;
 
 use crate::cache::storage::CacheStorage;
 use crate::graphql::Response;
@@ -16,12 +16,12 @@ const DEFAULT_INTROSPECTION_CACHE_CAPACITY: NonZeroUsize =
 /// A cache containing our well known introspection queries.
 pub(crate) struct Introspection {
     cache: CacheStorage<String, Response>,
-    planner: Arc<Planner<QueryPlanResult>>,
+    planner: Arc<PooledPlanner<QueryPlanResult>>,
 }
 
 impl Introspection {
     pub(crate) async fn with_capacity(
-        planner: Arc<Planner<QueryPlanResult>>,
+        planner: Arc<PooledPlanner<QueryPlanResult>>,
         capacity: NonZeroUsize,
     ) -> Self {
         Self {
@@ -30,13 +30,13 @@ impl Introspection {
         }
     }
 
-    pub(crate) async fn new(planner: Arc<Planner<QueryPlanResult>>) -> Self {
+    pub(crate) async fn new(planner: Arc<PooledPlanner<QueryPlanResult>>) -> Self {
         Self::with_capacity(planner, DEFAULT_INTROSPECTION_CACHE_CAPACITY).await
     }
 
     #[cfg(test)]
     pub(crate) async fn from_cache(
-        planner: Arc<Planner<QueryPlanResult>>,
+        planner: Arc<PooledPlanner<QueryPlanResult>>,
         cache: HashMap<String, Response>,
     ) -> Self {
         let this = Self::with_capacity(planner, cache.len().try_into().unwrap()).await;

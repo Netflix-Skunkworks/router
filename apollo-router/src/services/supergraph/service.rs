@@ -10,7 +10,7 @@ use futures::stream::StreamExt;
 use futures::TryFutureExt;
 use http::StatusCode;
 use indexmap::IndexMap;
-use router_bridge::planner::Planner;
+use router_bridge::planner::PooledPlanner;
 use router_bridge::planner::UsageReporting;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::SendError;
@@ -824,7 +824,7 @@ impl SupergraphCreator {
         self.query_planner_service.cache_keys(count).await
     }
 
-    pub(crate) fn planner(&self) -> Arc<Planner<QueryPlanResult>> {
+    pub(crate) fn planner(&self) -> Arc<PooledPlanner<QueryPlanResult>> {
         self.query_planner_service.planner()
     }
 

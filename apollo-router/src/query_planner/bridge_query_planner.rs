@@ -3,7 +3,9 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Write;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::thread::available_parallelism;
 use std::time::Instant;
 
 use apollo_compiler::ast;
@@ -11,6 +13,7 @@ use futures::future::BoxFuture;
 use router_bridge::planner::IncrementalDeliverySupport;
 use router_bridge::planner::PlanSuccess;
 use router_bridge::planner::Planner;
+use router_bridge::planner::PooledPlanner;
 use router_bridge::planner::QueryPlannerConfig;
 use router_bridge::planner::QueryPlannerDebugConfig;
 use router_bridge::planner::UsageReporting;
@@ -55,7 +58,7 @@ const VALIDATION_MATCH: &str = "match";
 ///
 /// No caching is performed. To cache, wrap in a [`CachingQueryPlanner`].
 pub(crate) struct BridgeQueryPlanner {
-    planner: Arc<Planner<QueryPlanResult>>,
+    planner: Arc<PooledPlanner<QueryPlanResult>>,
     schema: Arc<Schema>,
     introspection: Option<Arc<Introspection>>,
     configuration: Arc<Configuration>,
@@ -69,7 +72,7 @@ impl BridgeQueryPlanner {
     ) -> Result<Self, ServiceBuildError> {
         let schema = Schema::parse(&sdl, &configuration)?;
 
-        let planner = Planner::new(
+        let planner = PooledPlanner::new(
             sdl,
             QueryPlannerConfig {
                 reuse_query_fragments: configuration.supergraph.reuse_query_fragments,
@@ -93,6 +96,7 @@ impl BridgeQueryPlanner {
                         .experimental_paths_limit,
                 }),
             },
+            available_parallelism().unwrap_or(NonZeroUsize::new(8).unwrap())
         )
         .await;
 
@@ -212,7 +216,7 @@ impl BridgeQueryPlanner {
     }
 
     pub(crate) async fn new_from_planner(
-        old_planner: Arc<Planner<QueryPlanResult>>,
+        old_planner: Arc<PooledPlanner<QueryPlanResult>>,
         schema: String,
         configuration: Arc<Configuration>,
     ) -> Result<Self, ServiceBuildError> {
@@ -267,7 +271,7 @@ impl BridgeQueryPlanner {
         })
     }
 
-    pub(crate) fn planner(&self) -> Arc<Planner<QueryPlanResult>> {
+    pub(crate) fn planner(&self) -> Arc<PooledPlanner<QueryPlanResult>> {
         self.planner.clone()
     }
 
