@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 pub(crate) use self::execution::service::*;
 pub(crate) use self::query_planner::*;
+pub use self::router::service::set_transform_request_fn;
 pub(crate) use self::subgraph_service::*;
 pub(crate) use self::supergraph::service::*;
 use crate::graphql::Request;
@@ -22,7 +23,6 @@ pub(crate) use crate::services::subgraph::Response as SubgraphResponse;
 pub(crate) use crate::services::supergraph::service::SupergraphCreator;
 pub(crate) use crate::services::supergraph::Request as SupergraphRequest;
 pub(crate) use crate::services::supergraph::Response as SupergraphResponse;
-pub use self::router::service::set_transform_request_fn;
 
 pub mod execution;
 pub(crate) mod external;

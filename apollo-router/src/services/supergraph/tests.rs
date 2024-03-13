@@ -6,6 +6,7 @@ use http::HeaderValue;
 use tower::ServiceExt;
 use tower_service::Service;
 
+use crate::error::setup_test_custom_errors;
 use crate::graphql;
 use crate::plugin::test::MockSubgraph;
 use crate::services::router::ClientRequestAccepts;
@@ -15,7 +16,6 @@ use crate::spec::Schema;
 use crate::test_harness::MockedSubgraphs;
 use crate::Configuration;
 use crate::Context;
-use crate::error::setup_test_custom_errors;
 use crate::Notify;
 use crate::TestHarness;
 

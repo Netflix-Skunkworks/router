@@ -24,7 +24,6 @@ use crate::plugins::authorization::AuthorizationPlugin;
 use crate::plugins::authorization::CacheKeyMetadata;
 use crate::plugins::telemetry::utils::Timer;
 use crate::query_planner::labeler::add_defer_labels;
-use crate::query_planner::BridgeQueryPlanner;
 use crate::query_planner::QueryPlanResult;
 use crate::services::layers::persisted_queries::PersistedQueryLayer;
 use crate::services::layers::query_analysis::ParsedDocument;
@@ -38,6 +37,8 @@ use crate::spec::Schema;
 use crate::spec::SpecError;
 use crate::Configuration;
 use crate::Context;
+
+use super::BridgeQueryPlannerPool;
 
 /// An [`IndexMap`] of available plugins.
 pub(crate) type Plugins = IndexMap<String, Box<dyn QueryPlannerPlugin>>;
@@ -220,9 +221,9 @@ where
     }
 }
 
-impl CachingQueryPlanner<BridgeQueryPlanner> {
-    pub(crate) fn planner(&self) -> Arc<Planner<QueryPlanResult>> {
-        self.delegate.planner()
+impl CachingQueryPlanner<BridgeQueryPlannerPool> {
+    pub(crate) fn planners(&self) -> Vec<Arc<Planner<QueryPlanResult>>> {
+        self.delegate.planners()
     }
 }
 

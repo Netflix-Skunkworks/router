@@ -1,8 +1,8 @@
 //! Implements the router phase of the request lifecycle.
 
 use std::sync::Arc;
-use std::task::Poll;
 use std::sync::OnceLock;
+use std::task::Poll;
 
 use axum::body::StreamBody;
 use axum::response::*;
@@ -84,13 +84,15 @@ static ACCEL_BUFFERING_HEADER_NAME: HeaderName = HeaderName::from_static("x-acce
 static ACCEL_BUFFERING_HEADER_VALUE: HeaderValue = HeaderValue::from_static("no");
 static ORIGIN_HEADER_VALUE: HeaderValue = HeaderValue::from_static("origin");
 
-type TransformRequestFn = Box<dyn Fn(SupergraphRequest) -> BoxFuture<'static, Result<SupergraphRequest, SupergraphResponse>> + Send + Sync>;
+type TransformRequestFn = Box<
+    dyn Fn(SupergraphRequest) -> BoxFuture<'static, Result<SupergraphRequest, SupergraphResponse>>
+        + Send
+        + Sync,
+>;
 
 static TRANSFORM_REQUEST_FN: OnceLock<TransformRequestFn> = OnceLock::new();
 
-pub fn set_transform_request_fn(
-    transform_request_fn: TransformRequestFn,
-) {
+pub fn set_transform_request_fn(transform_request_fn: TransformRequestFn) {
     TRANSFORM_REQUEST_FN
         .set(Box::new(transform_request_fn))
         .map_err(|_| "transform_request_fn was already set")
@@ -252,8 +254,8 @@ impl RouterService {
         // }
         //
         let transform = TRANSFORM_REQUEST_FN
-                .get()
-                .expect("transform_request_fn was not set");
+            .get()
+            .expect("transform_request_fn was not set");
 
         let request_res = transform(supergraph_request).await;
 
@@ -809,7 +811,7 @@ impl RouterCreator {
         self.supergraph_creator.cache_keys(count).await
     }
 
-    pub(crate) fn planner(&self) -> Arc<Planner<QueryPlanResult>> {
-        self.supergraph_creator.planner()
+    pub(crate) fn planners(&self) -> Vec<Arc<Planner<QueryPlanResult>>> {
+        self.supergraph_creator.planners()
     }
 }

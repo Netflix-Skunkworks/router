@@ -542,7 +542,9 @@ impl Service<QueryPlannerRequest> for BridgeQueryPlanner {
                         .to_executable(schema)
                         // Assume transformation creates a valid document: ignore conversion errors
                         .unwrap_or_else(|invalid| invalid.partial);
-                    executable_operation = executable.get_operation(operation_name.as_deref()).ok()
+                    executable_operation = executable
+                        .get_operation(operation_name.as_deref())
+                        .ok()
                         .map(|op| op.name.clone().map(|n| n))
                         .flatten();
                     doc = Arc::new(ParsedDocumentInner {
@@ -573,8 +575,11 @@ impl Service<QueryPlannerRequest> for BridgeQueryPlanner {
                 )
                 .await;
             let duration = start.elapsed().as_secs_f64();
-            tracing::info!(histogram.apollo_router_query_planning_time = duration,
-                operation_name = executable_operation.map(|n| n.to_string()).unwrap_or_else(|| "anonymous".to_string())
+            tracing::info!(
+                histogram.apollo_router_query_planning_time = duration,
+                operation_name = executable_operation
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "anonymous".to_string())
             );
 
             match res {

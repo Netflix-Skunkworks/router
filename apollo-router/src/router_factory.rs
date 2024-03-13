@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
+use std::thread::available_parallelism;
 
 use axum::response::IntoResponse;
 use http::StatusCode;
@@ -28,7 +29,7 @@ use crate::plugins::subscription::APOLLO_SUBSCRIPTION_PLUGIN;
 use crate::plugins::telemetry::reload::apollo_opentelemetry_initialized;
 use crate::plugins::traffic_shaping::TrafficShaping;
 use crate::plugins::traffic_shaping::APOLLO_TRAFFIC_SHAPING;
-use crate::query_planner::BridgeQueryPlanner;
+use crate::query_planner::BridgeQueryPlannerPool;
 use crate::services::apollo_graph_reference;
 use crate::services::apollo_key;
 use crate::services::layers::persisted_queries::PersistedQueryLayer;
@@ -217,14 +218,14 @@ impl YamlRouterFactory {
     ) -> Result<RouterCreator, BoxError> {
         let query_planner_span = tracing::info_span!("query_planner_creation");
         // QueryPlannerService takes an UnplannedRequest and outputs PlannedRequest
-        let bridge_query_planner = match previous_router.as_ref().map(|router| router.planner()) {
+        let bridge_query_planner = match previous_router.as_ref().map(|router| router.planners()) {
             None => {
-                BridgeQueryPlanner::new(schema.clone(), configuration.clone())
+                BridgeQueryPlannerPool::new(schema.clone(), configuration.clone(), available_parallelism()?)
                     .instrument(query_planner_span)
                     .await?
             }
-            Some(planner) => {
-                BridgeQueryPlanner::new_from_planner(planner, schema.clone(), configuration.clone())
+            Some(planners) => {
+                BridgeQueryPlannerPool::new_from_planners(planners, schema.clone(), configuration.clone())
                     .instrument(query_planner_span)
                     .await?
             }
@@ -381,10 +382,10 @@ impl YamlRouterFactory {
         extra_plugins: Option<Vec<(String, Box<dyn DynPlugin>)>>,
     ) -> Result<SupergraphCreator, BoxError> {
         // QueryPlannerService takes an UnplannedRequest and outputs PlannedRequest
-        let bridge_query_planner = match previous_router.as_ref().map(|router| router.planner()) {
-            None => BridgeQueryPlanner::new(schema.clone(), configuration.clone()).await?,
-            Some(planner) => {
-                BridgeQueryPlanner::new_from_planner(planner, schema.clone(), configuration.clone())
+        let bridge_query_planner = match previous_router.as_ref().map(|router| router.planners()) {
+            None => BridgeQueryPlannerPool::new(schema.clone(), configuration.clone(), available_parallelism()?).await?,
+            Some(planners) => {
+                BridgeQueryPlannerPool::new_from_planners(planners, schema.clone(), configuration.clone())
                     .await?
             }
         };
