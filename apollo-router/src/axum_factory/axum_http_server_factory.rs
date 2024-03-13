@@ -596,11 +596,6 @@ async fn handle_graphql(
 
     let request: router::Request = http_request.into();
     let context = request.context.clone();
-    let accept_encoding = request
-        .router_request
-        .headers()
-        .get(ACCEPT_ENCODING)
-        .cloned();
 
     let res = service.oneshot(request).await;
     let dur = context.busy_time();
@@ -634,23 +629,7 @@ async fn handle_graphql(
                 .into_response()
         }
         Ok(response) => {
-            let (mut parts, body) = response.response.into_parts();
-
-            let opt_compressor = accept_encoding
-                .as_ref()
-                .and_then(|value| value.to_str().ok())
-                .and_then(|v| Compressor::new(v.split(',').map(|s| s.trim())));
-            let body = match opt_compressor {
-                None => body,
-                Some(compressor) => {
-                    parts.headers.insert(
-                        CONTENT_ENCODING,
-                        HeaderValue::from_static(compressor.content_encoding()),
-                    );
-                    Body::wrap_stream(compressor.process(body))
-                }
-            };
-
+            let (parts, body) = response.response.into_parts();
             http::Response::from_parts(parts, body).into_response()
         }
     }
