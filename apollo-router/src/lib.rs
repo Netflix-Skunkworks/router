@@ -90,7 +90,6 @@ pub use error::RouterError;
 pub use json_ext::Path;
 pub use spec::operation_limits::OperationLimits;
 
-pub use crate::axum_factory::set_add_extra_endpoints_layer;
 pub use crate::axum_factory::unsupported_set_axum_router_callback;
 pub use crate::configuration::Configuration;
 pub use crate::configuration::ListenAddr;

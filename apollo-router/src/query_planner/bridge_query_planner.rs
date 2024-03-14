@@ -584,7 +584,7 @@ impl Service<QueryPlannerRequest> for BridgeQueryPlanner {
                         .to_executable(schema)
                         // Assume transformation creates a valid document: ignore conversion errors
                         .unwrap_or_else(|invalid| invalid.partial);
-                    executable_operation = executable.get_operation(operation_name.as_deref()).ok()
+                    executable_operation = executable_document.get_operation(operation_name.as_deref()).ok()
                         .map(|op| op.name.clone().map(|n| n))
                         .flatten();
                     doc = Arc::new(ParsedDocumentInner {

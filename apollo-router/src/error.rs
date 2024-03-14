@@ -111,6 +111,7 @@ pub enum FetchError {
 }
 
 use std::sync::OnceLock;
+use apollo_compiler::execution::GraphQLError;
 
 static mut TO_GRAPHQL_ERROR: OnceLock<Box<dyn Fn(&FetchError, Option<Path>) -> Error + 'static>> =
     OnceLock::new();

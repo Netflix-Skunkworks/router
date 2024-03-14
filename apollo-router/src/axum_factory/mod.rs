@@ -12,7 +12,6 @@ use std::sync::OnceLock;
 use axum::Router;
 pub(crate) use axum_http_server_factory::span_mode;
 pub(crate) use axum_http_server_factory::AxumHttpServerFactory;
-pub use listeners::set_add_extra_endpoints_layer;
 pub(crate) use listeners::ListenAddrAndRouter;
 
 static ENDPOINT_CALLBACK: OnceLock<Arc<dyn Fn(Router) -> Router + Send + Sync>> = OnceLock::new();
