@@ -77,6 +77,8 @@ type Query
 {
   me: String @join__field(graph: ARTWORKSUBGRAPH)
   search: [SearchResult] @join__field(graph: SEARCHSUBGRAPH)
+  searchListOfList: [[SearchResult]] @join__field(graph: SEARCHSUBGRAPH)
+  searchListOfListOfList: [[[SearchResult]]] @join__field(graph: SEARCHSUBGRAPH)
 }
 
 union SearchResult
