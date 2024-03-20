@@ -88,6 +88,7 @@ pub use crate::context::Context;
 pub use crate::executable::main;
 pub use crate::executable::Executable;
 pub use crate::notification::Notify;
+pub use crate::query_planner::OperationKind;
 pub use crate::router::ApolloRouterError;
 pub use crate::router::ConfigurationSource;
 pub use crate::router::LicenseSource;
