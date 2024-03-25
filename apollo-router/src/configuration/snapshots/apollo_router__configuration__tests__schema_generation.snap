@@ -1390,6 +1390,11 @@ expression: "&schema"
       },
       "additionalProperties": false
     },
+    "experimental_generate_query_fragments": {
+      "description": "Enable generation of query fragments",
+      "type": "boolean",
+      "nullable": true
+    },
     "experimental_graphql_validation_mode": {
       "description": "Set the GraphQL validation implementation to use.",
       "default": "both",

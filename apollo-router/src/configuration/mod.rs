@@ -196,6 +196,9 @@ pub struct Configuration {
     /// If you don't know what this is about, you probably don't need it.
     #[serde(default)]
     pub(crate) experimental_type_conditioned_fetching: bool,
+
+    /// Enable generation of query fragments
+    pub(crate) experimental_generate_query_fragments: Option<bool>,
 }
 
 impl PartialEq for Configuration {
@@ -262,6 +265,7 @@ impl<'de> serde::Deserialize<'de> for Configuration {
             experimental_graphql_validation_mode: GraphQLValidationMode,
             experimental_batching: Batching,
             experimental_type_conditioned_fetching: bool,
+            experimental_generate_query_fragments: bool,
         }
         let ad_hoc: AdHocConfiguration = serde::Deserialize::deserialize(deserializer)?;
 
@@ -282,6 +286,7 @@ impl<'de> serde::Deserialize<'de> for Configuration {
             .graphql_validation_mode(ad_hoc.experimental_graphql_validation_mode)
             .experimental_batching(ad_hoc.experimental_batching)
             .experimental_type_conditioned_fetching(ad_hoc.experimental_type_conditioned_fetching)
+            .experimental_generate_query_fragments(ad_hoc.experimental_generate_query_fragments)
             .build()
             .map_err(|e| serde::de::Error::custom(e.to_string()))
     }
@@ -321,6 +326,7 @@ impl Configuration {
         experimental_api_schema_generation_mode: Option<ApiSchemaMode>,
         experimental_batching: Option<Batching>,
         experimental_type_conditioned_fetching: Option<bool>,
+        experimental_generate_query_fragments: Option<bool>,
     ) -> Result<Self, ConfigurationError> {
         #[cfg(not(test))]
         let notify_queue_cap = match apollo_plugins.get(APOLLO_SUBSCRIPTION_PLUGIN_NAME) {
@@ -362,7 +368,8 @@ impl Configuration {
             #[cfg(not(test))]
             notify: notify.map(|n| n.set_queue_size(notify_queue_cap))
                 .unwrap_or_else(|| Notify::builder().and_queue_size(notify_queue_cap).ttl(Duration::from_secs(HEARTBEAT_TIMEOUT_DURATION_SECONDS)).router_broadcasts(Arc::new(RouterBroadcasts::new())).heartbeat_error_message(graphql::Response::builder().errors(vec![graphql::Error::builder().message("the connection has been closed because it hasn't heartbeat for a while").extension_code("SUBSCRIPTION_HEARTBEAT_ERROR").build()]).build()).build()),
-            experimental_type_conditioned_fetching: experimental_type_conditioned_fetching.unwrap_or_default()
+            experimental_type_conditioned_fetching: experimental_type_conditioned_fetching.unwrap_or_default(),
+            experimental_generate_query_fragments
         };
 
         conf.validate()
@@ -399,6 +406,7 @@ impl Configuration {
         experimental_batching: Option<Batching>,
         experimental_api_schema_generation_mode: Option<ApiSchemaMode>,
         experimental_type_conditioned_fetching: Option<bool>,
+        experimental_generate_query_fragments: Option<bool>,
     ) -> Result<Self, ConfigurationError> {
         let configuration = Self {
             validated_yaml: Default::default(),
@@ -426,6 +434,7 @@ impl Configuration {
             experimental_batching: experimental_batching.unwrap_or_default(),
             experimental_type_conditioned_fetching: experimental_type_conditioned_fetching
                 .unwrap_or_default(),
+            experimental_generate_query_fragments,
         };
 
         configuration.validate()
