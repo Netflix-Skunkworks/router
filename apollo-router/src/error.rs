@@ -11,6 +11,7 @@ use router_bridge::planner::PlannerError;
 use router_bridge::planner::UsageReporting;
 use serde::Deserialize;
 use serde::Serialize;
+use serde_json_bytes::Value;
 use thiserror::Error;
 use tokio::task::JoinError;
 use tower::BoxError;
@@ -22,9 +23,8 @@ use crate::graphql::IntoGraphQLErrors;
 use crate::graphql::Location as ErrorLocation;
 use crate::graphql::Response;
 use crate::json_ext::Path;
-use crate::json_ext::Value;
-use crate::spec::operation_limits::OperationLimits;
-use crate::spec::SpecError;
+pub use crate::spec::operation_limits::OperationLimits;
+pub use crate::spec::SpecError;
 
 /// Error types for execution.
 ///
@@ -35,7 +35,7 @@ use crate::spec::SpecError;
 #[ignore_extra_doc_attributes]
 #[non_exhaustive]
 #[allow(missing_docs)] // FIXME
-pub(crate) enum FetchError {
+pub enum FetchError {
     /// invalid type for variable: '{name}'
     ValidationInvalidTypeVariable {
         /// Name of the variable.
@@ -111,9 +111,34 @@ pub(crate) enum FetchError {
     },
 }
 
+use std::sync::OnceLock;
+static mut TO_GRAPHQL_ERROR: OnceLock<Box<dyn Fn(&FetchError, Option<Path>) -> Error + 'static>> =
+    OnceLock::new();
+pub unsafe fn set_to_graphql_error(
+    to_graphql_error: impl Fn(&FetchError, Option<Path>) -> Error + 'static,
+) {
+    TO_GRAPHQL_ERROR
+        .set(Box::new(to_graphql_error))
+        .map_err(|_| "to_graphql_error was already set")
+        .unwrap();
+}
+
 impl FetchError {
     /// Convert the fetch error to a GraphQL error.
     pub(crate) fn to_graphql_error(&self, path: Option<Path>) -> Error {
+        unsafe {
+            match TO_GRAPHQL_ERROR.get() {
+                Some(callback) => callback(self, path),
+                None => {
+                    tracing::warn!("No TO_GRAPHQL_ERROR hook set!");
+                    self.original_to_graphql_error(path)
+                }
+            }
+        }
+    }
+
+    /// Convert the fetch error to a GraphQL error.
+    pub(crate) fn original_to_graphql_error(&self, path: Option<Path>) -> Error {
         let mut value: Value = serde_json_bytes::to_value(self).unwrap_or_default();
         if let Some(extensions) = value.as_object_mut() {
             extensions
@@ -198,7 +223,7 @@ impl From<QueryPlannerError> for FetchError {
 
 /// Error types for CacheResolver
 #[derive(Error, Debug, Display, Clone, Serialize, Deserialize)]
-pub(crate) enum CacheResolverError {
+pub enum CacheResolverError {
     /// value retrieval failed: {0}
     RetrievalError(Arc<QueryPlannerError>),
     /// batch processing failed: {0}
@@ -229,7 +254,7 @@ impl From<QueryPlannerError> for CacheResolverError {
 
 /// Error types for service building.
 #[derive(Error, Debug, Display)]
-pub(crate) enum ServiceBuildError {
+pub enum ServiceBuildError {
     /// couldn't build Query Planner Service: {0}
     QueryPlannerError(QueryPlannerError),
 
@@ -275,7 +300,7 @@ impl From<BoxError> for ServiceBuildError {
 
 /// Error types for QueryPlanner
 #[derive(Error, Debug, Display, Clone, Serialize, Deserialize)]
-pub(crate) enum QueryPlannerError {
+pub enum QueryPlannerError {
     /// couldn't instantiate query planner; invalid schema: {0}
     SchemaValidationErrors(PlannerErrors),
 
@@ -343,8 +368,34 @@ impl IntoGraphQLErrors for Vec<apollo_compiler::execution::GraphQLError> {
     }
 }
 
+static mut INTO_GRAPHQL_ERRORS: OnceLock<
+    Box<dyn Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static>,
+> = OnceLock::new();
+pub unsafe fn set_into_graphql_errors(
+    into_graphql_errors: impl Fn(QueryPlannerError) -> Result<Vec<Error>, QueryPlannerError> + 'static,
+) {
+    INTO_GRAPHQL_ERRORS
+        .set(Box::new(into_graphql_errors))
+        .map_err(|_| "into_graphql_errors was already set")
+        .unwrap();
+}
+
 impl IntoGraphQLErrors for QueryPlannerError {
     fn into_graphql_errors(self) -> Result<Vec<Error>, Self> {
+        unsafe {
+            match INTO_GRAPHQL_ERRORS.get() {
+                Some(callback) => callback(self),
+                None => {
+                    tracing::warn!("No INTO_GRAPHQL_ERROR hook set!");
+                    self.original_into_graphql_errors()
+                }
+            }
+        }
+    }
+}
+
+impl QueryPlannerError {
+    fn original_into_graphql_errors(self) -> Result<Vec<Error>, Self> {
         match self {
             QueryPlannerError::SpecError(err) => err
                 .into_graphql_errors()
@@ -414,7 +465,7 @@ impl IntoGraphQLErrors for QueryPlannerError {
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize)]
 /// Container for planner setup errors
-pub(crate) struct PlannerErrors(Arc<Vec<PlannerError>>);
+pub struct PlannerErrors(pub Arc<Vec<PlannerError>>);
 
 impl IntoGraphQLErrors for PlannerErrors {
     fn into_graphql_errors(self) -> Result<Vec<Error>, Self> {
@@ -503,12 +554,12 @@ impl From<QueryPlannerError> for Response {
 
 /// The payload if the plan_worker invocation failed
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct PlanErrors {
+pub struct PlanErrors {
     /// The errors the plan_worker invocation failed with
-    pub(crate) errors: Arc<Vec<router_bridge::planner::PlanError>>,
+    pub errors: Arc<Vec<router_bridge::planner::PlanError>>,
     /// Usage reporting related data such as the
     /// operation signature and referenced fields
-    pub(crate) usage_reporting: UsageReporting,
+    pub usage_reporting: UsageReporting,
 }
 
 impl From<router_bridge::planner::PlanErrors> for PlanErrors {
@@ -544,7 +595,7 @@ impl std::fmt::Display for PlanErrors {
 /// Error in the schema.
 #[derive(Debug, Error, Display, derive_more::From)]
 #[non_exhaustive]
-pub(crate) enum SchemaError {
+pub enum SchemaError {
     /// URL parse error for subgraph {0}: {1}
     UrlParse(String, http::uri::InvalidUri),
     /// Could not find an URL for subgraph {0}
@@ -563,8 +614,8 @@ pub(crate) enum SchemaError {
 
 /// Collection of schema validation errors.
 #[derive(Debug)]
-pub(crate) struct ParseErrors {
-    pub(crate) errors: DiagnosticList,
+pub struct ParseErrors {
+    pub errors: DiagnosticList,
 }
 
 impl std::fmt::Display for ParseErrors {
@@ -584,36 +635,10 @@ impl std::fmt::Display for ParseErrors {
     }
 }
 
-impl IntoGraphQLErrors for ParseErrors {
-    fn into_graphql_errors(self) -> Result<Vec<Error>, Self> {
-        Ok(self
-            .errors
-            .iter()
-            .map(|diagnostic| {
-                Error::builder()
-                    .message(diagnostic.error.to_string())
-                    .locations(
-                        diagnostic
-                            .get_line_column()
-                            .map(|location| {
-                                vec![ErrorLocation {
-                                    line: location.line as u32,
-                                    column: location.column as u32,
-                                }]
-                            })
-                            .unwrap_or_default(),
-                    )
-                    .extension_code("GRAPHQL_PARSING_FAILED")
-                    .build()
-            })
-            .collect())
-    }
-}
-
 /// Collection of schema validation errors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct ValidationErrors {
-    pub(crate) errors: Vec<apollo_compiler::execution::GraphQLError>,
+pub struct ValidationErrors {
+    pub errors: Vec<apollo_compiler::execution::GraphQLError>,
 }
 
 impl ValidationErrors {
@@ -694,6 +719,8 @@ pub(crate) enum SubgraphBatchingError {
 
 #[cfg(test)]
 mod tests {
+    use serde_json_bytes::Value;
+
     use super::*;
     use crate::graphql;
 
