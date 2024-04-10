@@ -9,6 +9,8 @@ pub(crate) mod query;
 mod schema;
 mod selection;
 
+use std::sync::OnceLock;
+
 use displaydoc::Display;
 pub(crate) use field_type::*;
 pub(crate) use fragments::*;
@@ -32,7 +34,7 @@ pub(crate) const LINK_AS_ARGUMENT: &str = "as";
 /// GraphQL parsing errors.
 #[derive(Error, Debug, Display, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
-pub(crate) enum SpecError {
+pub enum SpecError {
     /// missing input file for query
     UnknownFileId,
     /// selection processing recursion limit exceeded
@@ -101,26 +103,47 @@ impl ErrorExtension for SpecError {
     }
 }
 
+static mut INTO_GRAPHQL_ERRORS_SPEC: OnceLock<
+    Box<dyn Fn(SpecError) -> Result<Vec<crate::graphql::Error>, SpecError> + 'static>,
+> = OnceLock::new();
+pub unsafe fn set_into_graphql_errors_spec(
+    into_graphql_errors: impl Fn(SpecError) -> Result<Vec<crate::graphql::Error>, SpecError> + 'static,
+) {
+    INTO_GRAPHQL_ERRORS_SPEC
+        .set(Box::new(into_graphql_errors))
+        .map_err(|_| "into_graphql_errors_spec was already set")
+        .unwrap();
+}
+
 impl IntoGraphQLErrors for SpecError {
     fn into_graphql_errors(self) -> Result<Vec<crate::graphql::Error>, Self> {
-        match self {
-            SpecError::ValidationError(e) => {
-                e.into_graphql_errors().map_err(SpecError::ValidationError)
-            }
-            _ => {
-                let gql_err = match self.custom_extension_details() {
-                    Some(extension_details) => crate::graphql::Error::builder()
-                        .message(self.to_string())
-                        .extension_code(self.extension_code())
-                        .extensions(extension_details)
-                        .build(),
-                    None => crate::graphql::Error::builder()
-                        .message(self.to_string())
-                        .extension_code(self.extension_code())
-                        .build(),
-                };
+        unsafe {
+            match INTO_GRAPHQL_ERRORS_SPEC.get() {
+                Some(callback) => callback(self),
+                None => {
+                    tracing::warn!("No INTO_GRAPHQL_ERROR hook set!");
 
-                Ok(vec![gql_err])
+                    match self {
+                        SpecError::ValidationError(e) => {
+                            e.into_graphql_errors().map_err(SpecError::ValidationError)
+                        }
+                        _ => {
+                            let gql_err = match self.custom_extension_details() {
+                                Some(extension_details) => crate::graphql::Error::builder()
+                                    .message(self.to_string())
+                                    .extension_code(self.extension_code())
+                                    .extensions(extension_details)
+                                    .build(),
+                                None => crate::graphql::Error::builder()
+                                    .message(self.to_string())
+                                    .extension_code(self.extension_code())
+                                    .build(),
+                            };
+
+                            Ok(vec![gql_err])
+                        }
+                    }
+                }
             }
         }
     }
