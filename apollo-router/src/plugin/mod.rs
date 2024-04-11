@@ -51,6 +51,7 @@ use crate::services::execution;
 use crate::services::router;
 use crate::services::subgraph;
 use crate::services::supergraph;
+use crate::services::supergraph_request;
 use crate::ListenAddr;
 
 type InstanceFactory =
@@ -466,6 +467,14 @@ pub trait PluginUnstable: Send + Sync + 'static {
         service
     }
 
+    /// TODO: Docs
+    fn supergraph_request_service(
+        &self,
+        service: supergraph_request::BoxService,
+    ) -> supergraph_request::BoxService {
+        service
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -517,6 +526,13 @@ where
         service: subgraph::BoxService,
     ) -> subgraph::BoxService {
         Plugin::subgraph_service(self, subgraph_name, service)
+    }
+
+    fn supergraph_request_service(
+        &self,
+        service: supergraph_request::BoxService,
+    ) -> supergraph_request::BoxService {
+        service
     }
 
     /// Return the name of the plugin.
@@ -604,6 +620,14 @@ pub(crate) trait PluginPrivate: Send + Sync + 'static {
         service
     }
 
+    /// TODO: Docs
+    fn supergraph_request_service(
+        &self,
+        service: supergraph_request::BoxService,
+    ) -> supergraph_request::BoxService {
+        service
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -652,6 +676,14 @@ where
         service: subgraph::BoxService,
     ) -> subgraph::BoxService {
         PluginUnstable::subgraph_service(self, subgraph_name, service)
+    }
+
+    /// TODO: Docs
+    fn supergraph_request_service(
+        &self,
+        service: supergraph_request::BoxService,
+    ) -> supergraph_request::BoxService {
+        PluginUnstable::supergraph_request_service(self, service)
     }
 
     /// Return the name of the plugin.
@@ -709,6 +741,12 @@ pub(crate) trait DynPlugin: Send + Sync + 'static {
         service: crate::services::http::BoxService,
     ) -> crate::services::http::BoxService;
 
+    /// TODO: Docs
+    fn supergraph_request_service(
+        &self,
+        service: supergraph_request::BoxService,
+    ) -> supergraph_request::BoxService;
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str;
 
@@ -752,6 +790,14 @@ where
         service: crate::services::http::BoxService,
     ) -> crate::services::http::BoxService {
         self.http_client_service(name, service)
+    }
+
+    /// TODO: Docs
+    fn supergraph_request_service(
+        &self,
+        service: supergraph_request::BoxService,
+    ) -> supergraph_request::BoxService {
+        self.supergraph_request_service(service)
     }
 
     fn name(&self) -> &'static str {
