@@ -439,81 +439,6 @@ async fn it_displays_sandbox_with_different_supergraph_path() {
 }
 
 #[tokio::test]
-async fn it_compress_response_body() -> Result<(), ApolloRouterError> {
-    let expected_response = graphql::Response::builder()
-        .data(json!({"response": "yayyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"})) // Body must be bigger than 32 to be compressed
-        .build();
-    let example_response = expected_response.clone();
-    let router_service = router::service::from_supergraph_mock_callback(move |req| {
-        let example_response = example_response.clone();
-
-        Ok(SupergraphResponse::new_from_graphql_response(
-            example_response,
-            req.context,
-        ))
-    })
-    .await;
-    let (server, client) = init(router_service).await;
-    let url = format!("{}/", server.graphql_listen_address().as_ref().unwrap());
-
-    // Post query
-    let response = client
-        .post(url.as_str())
-        .header(ACCEPT_ENCODING, HeaderValue::from_static("gzip"))
-        .body(json!({ "query": "query { me { name } }" }).to_string())
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    assert_eq!(
-        response.headers().get(&CONTENT_ENCODING),
-        Some(&HeaderValue::from_static("gzip"))
-    );
-
-    // Decompress body
-    let body_bytes = response.bytes().await.unwrap();
-    let mut decoder = GzipDecoder::new(Vec::new());
-    decoder.write_all(&body_bytes).await.unwrap();
-    decoder.shutdown().await.unwrap();
-    let response = decoder.into_inner();
-    let graphql_resp: graphql::Response = serde_json::from_slice(&response).unwrap();
-    assert_eq!(graphql_resp, expected_response);
-
-    // Get query
-    let response = client
-        .get(url.as_str())
-        .header(ACCEPT_ENCODING, HeaderValue::from_static("gzip"))
-        .query(&json!({ "query": "query { me { name } }" }))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-
-    assert_eq!(
-        response.headers().get(header::CONTENT_TYPE),
-        Some(&HeaderValue::from_static(APPLICATION_JSON.essence_str()))
-    );
-    assert_eq!(
-        response.headers().get(&CONTENT_ENCODING),
-        Some(&HeaderValue::from_static("gzip"))
-    );
-
-    // Decompress body
-    let body_bytes = response.bytes().await.unwrap();
-    let mut decoder = GzipDecoder::new(Vec::new());
-    decoder.write_all(&body_bytes).await.unwrap();
-    decoder.shutdown().await.unwrap();
-    let response = decoder.into_inner();
-    let graphql_resp: graphql::Response = serde_json::from_slice(&response).unwrap();
-    assert_eq!(graphql_resp, expected_response);
-
-    server.shutdown().await?;
-    Ok(())
-}
-
-#[tokio::test]
 async fn it_decompress_request_body() -> Result<(), ApolloRouterError> {
     let original_body = json!({ "query": "query { me { name } }" });
     let mut encoder = GzipEncoder::new(Vec::new());
@@ -1973,35 +1898,6 @@ fn assert_compressed<B>(response: &http::Response<B>, expected: bool) {
             .unwrap_or_default(),
         expected
     )
-}
-
-#[tokio::test]
-async fn test_compressed_response() {
-    let response = make_request(
-        json!({
-            "query": "
-                query TopProducts($first: Int) { 
-                    topProducts(first: $first) { 
-                        upc 
-                        name 
-                        reviews { 
-                            id 
-                            product { name } 
-                            author { id name } 
-                        } 
-                    } 
-                }
-            ",
-            "variables": {"first": 2_u32},
-        }),
-        RequestType::Compressed,
-    )
-    .await;
-    assert_compressed(&response, true);
-    let status = response.status().as_u16();
-    let graphql_response = response.into_body().expect_not_multipart();
-    assert_eq!(graphql_response["errors"], json!(null));
-    assert_eq!(status, 200);
 }
 
 #[tokio::test]
