@@ -59,6 +59,7 @@ use crate::services::new_service::ServiceFactory;
 use crate::services::router;
 #[cfg(test)]
 use crate::services::supergraph;
+use crate::services::supergraph_request::{self, service::SupergraphRequestService};
 use crate::services::HasPlugins;
 #[cfg(test)]
 use crate::services::HasSchema;
@@ -85,33 +86,68 @@ static ACCEL_BUFFERING_HEADER_NAME: HeaderName = HeaderName::from_static("x-acce
 static ACCEL_BUFFERING_HEADER_VALUE: HeaderValue = HeaderValue::from_static("no");
 static ORIGIN_HEADER_VALUE: HeaderValue = HeaderValue::from_static("origin");
 
-/// Containing [`Service`] in the request lifecyle.
 #[derive(Clone)]
-pub(crate) struct RouterService {
+pub(crate) struct SupergraphRequestServiceCreator {
     supergraph_creator: Arc<SupergraphCreator>,
     apq_layer: APQLayer,
     persisted_query_layer: Arc<PersistedQueryLayer>,
     query_analysis_layer: QueryAnalysisLayer,
-    http_max_request_bytes: usize,
-    batching: Batching,
 }
 
-impl RouterService {
+impl SupergraphRequestServiceCreator {
     pub(crate) fn new(
         supergraph_creator: Arc<SupergraphCreator>,
         apq_layer: APQLayer,
         persisted_query_layer: Arc<PersistedQueryLayer>,
         query_analysis_layer: QueryAnalysisLayer,
-        http_max_request_bytes: usize,
-        batching: Batching,
     ) -> Self {
-        RouterService {
+        Self {
             supergraph_creator,
             apq_layer,
             persisted_query_layer,
             query_analysis_layer,
+        }
+    }
+
+    fn create(&self) -> supergraph_request::BoxService {
+        let apq_layer = self.apq_layer.clone();
+        let pq_layer = self.persisted_query_layer.clone();
+        let qa_layer = self.query_analysis_layer.clone();
+
+        let supergraph_request_service =
+            SupergraphRequestService::new(apq_layer, pq_layer, qa_layer);
+
+        self.supergraph_creator
+            .plugins()
+            .iter()
+            .rev()
+            .fold(supergraph_request_service.boxed(), |acc, (_, e)| {
+                e.supergraph_request_service(acc)
+            })
+    }
+}
+
+/// Containing [`Service`] in the request lifecyle.
+#[derive(Clone)]
+pub(crate) struct RouterService {
+    supergraph_creator: Arc<SupergraphCreator>,
+    http_max_request_bytes: usize,
+    batching: Batching,
+    supergraph_request_service_creator: SupergraphRequestServiceCreator,
+}
+
+impl RouterService {
+    pub(crate) fn new(
+        supergraph_creator: Arc<SupergraphCreator>,
+        http_max_request_bytes: usize,
+        batching: Batching,
+        supergraph_request_service_creator: SupergraphRequestServiceCreator,
+    ) -> Self {
+        RouterService {
+            supergraph_creator,
             http_max_request_bytes,
             batching,
+            supergraph_request_service_creator,
         }
     }
 }
@@ -231,28 +267,13 @@ impl RouterService {
         &self,
         supergraph_request: SupergraphRequest,
     ) -> Result<router::Response, BoxError> {
-        let mut request_res = self
-            .persisted_query_layer
-            .supergraph_request(supergraph_request);
+        let req_svc = self.supergraph_request_service_creator.create();
 
-        if let Ok(supergraph_request) = request_res {
-            request_res = self.apq_layer.supergraph_request(supergraph_request).await;
-        }
-
-        let SupergraphResponse { response, context } = match request_res {
-            Err(response) => response,
-            Ok(request) => match self.query_analysis_layer.supergraph_request(request).await {
-                Err(response) => response,
-                Ok(request) => match self
-                    .persisted_query_layer
-                    .supergraph_request_with_analyzed_query(request)
-                    .await
-                {
-                    Err(response) => response,
-                    Ok(request) => self.supergraph_creator.create().oneshot(request).await?,
-                },
-            },
-        };
+        let SupergraphResponse { response, context } =
+            match req_svc.oneshot(supergraph_request).await {
+                Ok(req) => self.supergraph_creator.create().oneshot(req).await?,
+                Err(res) => res,
+            };
 
         let ClientRequestAccepts {
             wildcard: accepts_wildcard,
@@ -906,13 +927,19 @@ impl RouterCreator {
         Error = BoxError,
         Future = BoxFuture<'static, router::ServiceResult>,
     > + Send {
+        let supergraph_creator = self.supergraph_creator.clone();
+        let apq_layer = self.apq_layer.clone();
+        let pq_layer = self.persisted_query_layer.clone();
+        let qa_layer = self.query_analysis_layer.clone();
+
+        let supergraph_request_service_creator =
+            SupergraphRequestServiceCreator::new(supergraph_creator, apq_layer, pq_layer, qa_layer);
+
         let router_service = content_negotiation::RouterLayer::default().layer(RouterService::new(
             self.supergraph_creator.clone(),
-            self.apq_layer.clone(),
-            self.persisted_query_layer.clone(),
-            self.query_analysis_layer.clone(),
             self.http_max_request_bytes,
             self.batching.clone(),
+            supergraph_request_service_creator,
         ));
 
         ServiceBuilder::new()
