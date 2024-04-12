@@ -42,16 +42,22 @@ use tower::BoxError;
 use tower::Service;
 use tower::ServiceBuilder;
 
+use crate::cache::storage::KeyType;
+use crate::cache::storage::SecondaryCacheStorage;
+use crate::cache::storage::ValueType;
+use crate::error::QueryPlannerError;
 use crate::graphql;
 use crate::layers::ServiceBuilderExt;
 use crate::notification::Notify;
 use crate::query_planner::fetch::SubgraphSchemas;
+use crate::query_planner::CachingQueryKey;
 use crate::router_factory::Endpoint;
 use crate::services::execution;
 use crate::services::router;
 use crate::services::subgraph;
 use crate::services::supergraph;
 use crate::services::supergraph_request;
+use crate::services::QueryPlannerContent;
 use crate::ListenAddr;
 
 type InstanceFactory =
@@ -475,6 +481,20 @@ pub trait PluginUnstable: Send + Sync + 'static {
         service
     }
 
+    /// TODO: Docs
+    fn query_planning_secondary_cache(
+        &self,
+    ) -> Option<
+        Arc<
+            dyn SecondaryCacheStorage<
+                CachingQueryKey,
+                Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+            >,
+        >,
+    > {
+        None
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -533,6 +553,20 @@ where
         service: supergraph_request::BoxService,
     ) -> supergraph_request::BoxService {
         service
+    }
+
+    /// TODO: Docs
+    fn query_planning_secondary_cache(
+        &self,
+    ) -> Option<
+        Arc<
+            dyn SecondaryCacheStorage<
+                CachingQueryKey,
+                Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+            >,
+        >,
+    > {
+        None
     }
 
     /// Return the name of the plugin.
@@ -628,6 +662,20 @@ pub(crate) trait PluginPrivate: Send + Sync + 'static {
         service
     }
 
+    /// TODO: Docs
+    fn query_planning_secondary_cache(
+        &self,
+    ) -> Option<
+        Arc<
+            dyn SecondaryCacheStorage<
+                CachingQueryKey,
+                Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+            >,
+        >,
+    > {
+        None
+    }
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str
     where
@@ -684,6 +732,20 @@ where
         service: supergraph_request::BoxService,
     ) -> supergraph_request::BoxService {
         PluginUnstable::supergraph_request_service(self, service)
+    }
+
+    /// TODO: Docs
+    fn query_planning_secondary_cache(
+        &self,
+    ) -> Option<
+        Arc<
+            dyn SecondaryCacheStorage<
+                CachingQueryKey,
+                Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+            >,
+        >,
+    > {
+        PluginUnstable::query_planning_secondary_cache(self)
     }
 
     /// Return the name of the plugin.
@@ -747,6 +809,18 @@ pub(crate) trait DynPlugin: Send + Sync + 'static {
         service: supergraph_request::BoxService,
     ) -> supergraph_request::BoxService;
 
+    /// TODO: Docs
+    fn query_planning_secondary_cache(
+        &self,
+    ) -> Option<
+        Arc<
+            dyn SecondaryCacheStorage<
+                CachingQueryKey,
+                Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+            >,
+        >,
+    >;
+
     /// Return the name of the plugin.
     fn name(&self) -> &'static str;
 
@@ -798,6 +872,20 @@ where
         service: supergraph_request::BoxService,
     ) -> supergraph_request::BoxService {
         self.supergraph_request_service(service)
+    }
+
+    /// TODO: Docs
+    fn query_planning_secondary_cache(
+        &self,
+    ) -> Option<
+        Arc<
+            dyn SecondaryCacheStorage<
+                CachingQueryKey,
+                Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+            >,
+        >,
+    > {
+        self.query_planning_secondary_cache()
     }
 
     fn name(&self) -> &'static str {

@@ -25,6 +25,9 @@ use tracing::Instrument;
 
 use super::fetch::QueryHash;
 use crate::cache::storage::InMemoryCache;
+use crate::cache::storage::KeyType;
+use crate::cache::storage::SecondaryCacheStorage;
+use crate::cache::storage::ValueType;
 use crate::cache::DeduplicatingCache;
 use crate::error::CacheResolverError;
 use crate::error::QueryPlannerError;
@@ -111,11 +114,13 @@ where
         subgraph_schemas: Arc<HashMap<String, Arc<Valid<apollo_compiler::Schema>>>>,
         configuration: &Configuration,
         plugins: Plugins,
+        secondary_cache: Option<Arc<dyn SecondaryCacheStorage<CachingQueryKey, Result<QueryPlannerContent, Arc<QueryPlannerError>>>>>,
     ) -> Result<CachingQueryPlanner<T>, BoxError> {
         let cache = Arc::new(
             DeduplicatingCache::from_configuration(
                 &configuration.supergraph.query_planning.cache.clone().into(),
                 "query planner",
+                secondary_cache,
             )
             .await?,
         );
@@ -620,8 +625,9 @@ fn stats_report_key_hash(stats_report_key: &str) -> String {
     hex::encode(result)
 }
 
+/// TODO
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CachingQueryKey {
+pub struct CachingQueryKey {
     pub(crate) query: String,
     pub(crate) schema_id: Arc<String>,
     pub(crate) operation: Option<String>,
@@ -761,6 +767,7 @@ mod tests {
             Default::default(),
             &configuration,
             IndexMap::default(),
+            None,
         )
         .await
         .unwrap();
@@ -867,6 +874,7 @@ mod tests {
             Default::default(),
             &configuration,
             IndexMap::default(),
+            None,
         )
         .await
         .unwrap();
