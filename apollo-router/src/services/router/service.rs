@@ -901,7 +901,7 @@ impl RouterCreator {
         let static_page = StaticPageLayer::new(&configuration);
         let apq_layer = if configuration.apq.enabled {
             APQLayer::with_cache(
-                DeduplicatingCache::from_configuration(&configuration.apq.router.cache, "APQ")
+                DeduplicatingCache::from_configuration(&configuration.apq.router.cache, "APQ", None)
                     .await?,
             )
         } else {

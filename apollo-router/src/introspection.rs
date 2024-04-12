@@ -26,7 +26,7 @@ impl Introspection {
         capacity: NonZeroUsize,
     ) -> Result<Self, BoxError> {
         Ok(Self {
-            cache: CacheStorage::new(capacity, None, "introspection").await?,
+            cache: CacheStorage::new(capacity, None, "introspection", None).await?,
             planner,
         })
     }
