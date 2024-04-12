@@ -675,7 +675,6 @@ impl std::fmt::Display for ValidationErrors {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use serde_json_bytes::Value;

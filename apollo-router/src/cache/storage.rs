@@ -43,6 +43,27 @@ where
 
 pub(crate) type InMemoryCache<K, V> = Arc<Mutex<LruCache<K, V>>>;
 
+#[async_trait::async_trait]
+pub trait SecondaryCacheStorage<K, V>: Send + Sync {
+    async fn get(&self, key: &K) -> Option<V>;
+    async fn insert(&self, key: K, value: V);
+}
+
+#[async_trait::async_trait]
+impl<K, V> SecondaryCacheStorage<K, V> for RedisCacheStorage
+where
+    K: KeyType + 'static,
+    V: ValueType + 'static,
+{
+    async fn get(&self, key: &K) -> Option<V> {
+        self.get(RedisKey(key.clone())).await.map(|k| k.0)
+    }
+
+    async fn insert(&self, key: K, value: V) {
+        self.insert(RedisKey(key), RedisValue(value), None).await;
+    }
+}
+
 // placeholder storage module
 //
 // this will be replaced by the multi level (in memory + redis/memcached) once we find
@@ -51,41 +72,46 @@ pub(crate) type InMemoryCache<K, V> = Arc<Mutex<LruCache<K, V>>>;
 pub(crate) struct CacheStorage<K: KeyType, V: ValueType> {
     caller: String,
     inner: Arc<Mutex<LruCache<K, V>>>,
-    redis: Option<RedisCacheStorage>,
+    redis: Option<Arc<dyn SecondaryCacheStorage<K, V>>>,
 }
 
 impl<K, V> CacheStorage<K, V>
 where
-    K: KeyType,
-    V: ValueType,
+    K: KeyType + 'static,
+    V: ValueType + 'static,
 {
     pub(crate) async fn new(
         max_capacity: NonZeroUsize,
         config: Option<RedisCache>,
         caller: &str,
+        secondary_cache: Option<Arc<dyn SecondaryCacheStorage<K, V>>>,
     ) -> Result<Self, BoxError> {
+        let redis = if let Some(config) = config {
+            let required_to_start = config.required_to_start;
+            match RedisCacheStorage::new(config).await {
+                Err(e) => {
+                    tracing::error!(
+                        cache = caller,
+                        e,
+                        "could not open connection to Redis for caching",
+                    );
+                    if required_to_start {
+                        return Err(e);
+                    }
+                    None
+                }
+                Ok(storage) => Some(Arc::new(storage)),
+            }
+        } else {
+            None
+        };
+
+        let redis: Option<Arc<dyn SecondaryCacheStorage<K, V>>> = redis.map(|r| r as _);
+
         Ok(Self {
             caller: caller.to_string(),
             inner: Arc::new(Mutex::new(LruCache::new(max_capacity))),
-            redis: if let Some(config) = config {
-                let required_to_start = config.required_to_start;
-                match RedisCacheStorage::new(config).await {
-                    Err(e) => {
-                        tracing::error!(
-                            cache = caller,
-                            e,
-                            "could not open connection to Redis for caching",
-                        );
-                        if required_to_start {
-                            return Err(e);
-                        }
-                        None
-                    }
-                    Ok(storage) => Some(storage),
-                }
-            } else {
-                None
-            },
+            redis: secondary_cache.or(redis),
         })
     }
 
@@ -123,10 +149,9 @@ where
 
                 let instant_redis = Instant::now();
                 if let Some(redis) = self.redis.as_ref() {
-                    let inner_key = RedisKey(key.clone());
-                    match redis.get::<K, V>(inner_key).await {
+                    match redis.get(key).await {
                         Some(v) => {
-                            self.inner.lock().await.put(key.clone(), v.0.clone());
+                            self.inner.lock().await.put(key.clone(), v.clone());
 
                             tracing::info!(
                                 monotonic_counter.apollo_router_cache_hit_count = 1u64,
@@ -139,7 +164,7 @@ where
                                 kind = %self.caller,
                                 storage = &tracing::field::display(CacheStorageName::Redis),
                             );
-                            Some(v.0)
+                            Some(v)
                         }
                         None => {
                             tracing::info!(
@@ -165,9 +190,7 @@ where
 
     pub(crate) async fn insert(&self, key: K, value: V) {
         if let Some(redis) = self.redis.as_ref() {
-            redis
-                .insert(RedisKey(key.clone()), RedisValue(value.clone()), None)
-                .await;
+            redis.insert(key.clone(), value.clone()).await;
         }
 
         let mut in_memory = self.inner.lock().await;

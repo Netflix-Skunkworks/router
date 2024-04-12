@@ -17,7 +17,7 @@ assert_impl_all!(Request: Send);
 /// [`Context`] for the request.
 #[derive(Derivative)]
 #[derivative(Debug)]
-pub(crate) struct Request {
+pub struct Request {
     pub(crate) query: String,
     pub(crate) operation_name: Option<String>,
     pub(crate) context: Context,
@@ -77,7 +77,7 @@ pub(crate) struct Response {
 
 /// Query, QueryPlan and Introspection data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum QueryPlannerContent {
+pub enum QueryPlannerContent {
     Plan { plan: Arc<QueryPlan> },
     Response { response: Box<graphql::Response> },
     IntrospectionDisabled,

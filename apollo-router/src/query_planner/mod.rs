@@ -6,6 +6,8 @@ pub(crate) use bridge_query_planner::*;
 pub(crate) use bridge_query_planner_pool::*;
 pub(crate) use caching_query_planner::*;
 
+pub use caching_query_planner::CachingQueryKey;
+
 pub use self::fetch::{OperationKind, QueryHash};
 
 mod bridge_query_planner;

@@ -712,11 +712,18 @@ impl PluggableSupergraphServiceBuilder {
         let configuration = self.configuration.unwrap_or_default();
 
         let schema = self.planner.schema();
+
+        let secondary_cache = self
+            .plugins
+            .iter()
+            .find_map(|(_, p)| p.query_planning_secondary_cache());
+
         let query_planner_service = CachingQueryPlanner::new(
             self.planner,
             schema.clone(),
             &configuration,
             IndexMap::new(),
+            secondary_cache,
         )
         .await?;
 
