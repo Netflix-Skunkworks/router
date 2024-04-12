@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 pub(crate) use self::execution::service::*;
-pub(crate) use self::query_planner::*;
 pub(crate) use self::subgraph_service::*;
 pub(crate) use self::supergraph::service::*;
 use crate::graphql::Request;
@@ -11,6 +10,7 @@ use crate::http_ext;
 pub use crate::http_ext::TryIntoHeaderName;
 pub use crate::http_ext::TryIntoHeaderValue;
 pub use crate::query_planner::OperationKind;
+pub use query_planner::QueryPlannerContent;
 pub(crate) use crate::services::execution::Request as ExecutionRequest;
 pub(crate) use crate::services::execution::Response as ExecutionResponse;
 pub(crate) use crate::services::query_planner::Request as QueryPlannerRequest;
