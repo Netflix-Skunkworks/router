@@ -168,6 +168,10 @@ pub struct Configuration {
     #[serde(default)]
     pub(crate) experimental_api_schema_generation_mode: ApiSchemaMode,
 
+    /// Set the Apollo usage report signature and referenced field generation implementation to use.
+    #[serde(default)]
+    pub(crate) experimental_apollo_metrics_generation_mode: ApolloMetricsGenerationMode,
+
     /// Plugin configuration
     #[serde(default)]
     pub(crate) plugins: UserPlugins,
@@ -186,7 +190,12 @@ pub struct Configuration {
 
     /// Batching configuration.
     #[serde(default)]
-    pub(crate) experimental_batching: Batching,
+    pub(crate) batching: Batching,
+
+    /// Type conditioned fetching configuration.
+    /// If you don't know what this is about, you probably don't need it.
+    #[serde(default)]
+    pub(crate) experimental_type_conditioned_fetching: bool,
 }
 
 impl PartialEq for Configuration {
@@ -200,6 +209,21 @@ impl PartialEq for Configuration {
 #[derivative(Debug)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum ApiSchemaMode {
+    /// Use the new Rust-based implementation.
+    New,
+    /// Use the old JavaScript-based implementation.
+    Legacy,
+    /// Use Rust-based and Javascript-based implementations side by side, logging warnings if the
+    /// implementations disagree.
+    #[default]
+    Both,
+}
+
+/// Apollo usage report signature and referenced field generation modes.
+#[derive(Clone, PartialEq, Eq, Default, Derivative, Serialize, Deserialize, JsonSchema)]
+#[derivative(Debug)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum ApolloMetricsGenerationMode {
     /// Use the new Rust-based implementation.
     New,
     /// Use the old JavaScript-based implementation.
@@ -235,7 +259,9 @@ impl<'de> serde::Deserialize<'de> for Configuration {
             uplink: UplinkConfig,
             limits: Limits,
             experimental_chaos: Chaos,
-            experimental_batching: Batching,
+            batching: Batching,
+            experimental_type_conditioned_fetching: bool,
+            experimental_apollo_metrics_generation_mode: ApolloMetricsGenerationMode,
         }
         let ad_hoc: AdHocConfiguration = serde::Deserialize::deserialize(deserializer)?;
 
@@ -253,7 +279,11 @@ impl<'de> serde::Deserialize<'de> for Configuration {
             .operation_limits(ad_hoc.limits)
             .chaos(ad_hoc.experimental_chaos)
             .uplink(ad_hoc.uplink)
-            .experimental_batching(ad_hoc.experimental_batching)
+            .experimental_type_conditioned_fetching(ad_hoc.experimental_type_conditioned_fetching)
+            .batching(ad_hoc.batching)
+            .experimental_apollo_metrics_generation_mode(
+                ad_hoc.experimental_apollo_metrics_generation_mode,
+            )
             .build()
             .map_err(|e| serde::de::Error::custom(e.to_string()))
     }
@@ -290,7 +320,9 @@ impl Configuration {
         chaos: Option<Chaos>,
         uplink: Option<UplinkConfig>,
         experimental_api_schema_generation_mode: Option<ApiSchemaMode>,
-        experimental_batching: Option<Batching>,
+        experimental_type_conditioned_fetching: Option<bool>,
+        batching: Option<Batching>,
+        experimental_apollo_metrics_generation_mode: Option<ApolloMetricsGenerationMode>,
     ) -> Result<Self, ConfigurationError> {
         #[cfg(not(test))]
         let notify_queue_cap = match apollo_plugins.get(APOLLO_SUBSCRIPTION_PLUGIN_NAME) {
@@ -317,6 +349,7 @@ impl Configuration {
             limits: operation_limits.unwrap_or_default(),
             experimental_chaos: chaos.unwrap_or_default(),
             experimental_api_schema_generation_mode:  experimental_api_schema_generation_mode.unwrap_or_default(),
+            experimental_apollo_metrics_generation_mode:  experimental_apollo_metrics_generation_mode.unwrap_or_default(),
             plugins: UserPlugins {
                 plugins: Some(plugins),
             },
@@ -325,12 +358,13 @@ impl Configuration {
             },
             tls: tls.unwrap_or_default(),
             uplink,
-            experimental_batching: experimental_batching.unwrap_or_default(),
+            batching: batching.unwrap_or_default(),
             #[cfg(test)]
             notify: notify.unwrap_or_default(),
             #[cfg(not(test))]
             notify: notify.map(|n| n.set_queue_size(notify_queue_cap))
                 .unwrap_or_else(|| Notify::builder().and_queue_size(notify_queue_cap).ttl(Duration::from_secs(HEARTBEAT_TIMEOUT_DURATION_SECONDS)).router_broadcasts(Arc::new(RouterBroadcasts::new())).heartbeat_error_message(graphql::Response::builder().errors(vec![graphql::Error::builder().message("the connection has been closed because it hasn't heartbeat for a while").extension_code("SUBSCRIPTION_HEARTBEAT_ERROR").build()]).build()).build()),
+            experimental_type_conditioned_fetching: experimental_type_conditioned_fetching.unwrap_or_default(),
         };
 
         conf.validate()
@@ -363,8 +397,10 @@ impl Configuration {
         operation_limits: Option<Limits>,
         chaos: Option<Chaos>,
         uplink: Option<UplinkConfig>,
-        experimental_batching: Option<Batching>,
+        batching: Option<Batching>,
         experimental_api_schema_generation_mode: Option<ApiSchemaMode>,
+        experimental_type_conditioned_fetching: Option<bool>,
+        experimental_apollo_metrics_generation_mode: Option<ApolloMetricsGenerationMode>,
     ) -> Result<Self, ConfigurationError> {
         let configuration = Self {
             validated_yaml: Default::default(),
@@ -377,6 +413,8 @@ impl Configuration {
             experimental_chaos: chaos.unwrap_or_default(),
             experimental_api_schema_generation_mode: experimental_api_schema_generation_mode
                 .unwrap_or_default(),
+            experimental_apollo_metrics_generation_mode:
+                experimental_apollo_metrics_generation_mode.unwrap_or_default(),
             plugins: UserPlugins {
                 plugins: Some(plugins),
             },
@@ -388,7 +426,9 @@ impl Configuration {
             apq: apq.unwrap_or_default(),
             persisted_queries: persisted_query.unwrap_or_default(),
             uplink,
-            experimental_batching: experimental_batching.unwrap_or_default(),
+            experimental_type_conditioned_fetching: experimental_type_conditioned_fetching
+                .unwrap_or_default(),
+            batching: batching.unwrap_or_default(),
         };
 
         configuration.validate()
@@ -1545,4 +1585,42 @@ pub(crate) struct Batching {
 
     /// Batching mode
     pub(crate) mode: BatchingMode,
+
+    /// Subgraph options for batching
+    pub(crate) subgraph: Option<SubgraphConfiguration<CommonBatchingConfig>>,
+}
+
+/// Common options for configuring subgraph batching
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema)]
+pub(crate) struct CommonBatchingConfig {
+    /// Whether this batching config should be enabled
+    pub(crate) enabled: bool,
+}
+
+impl Batching {
+    // Check if we should enable batching for a particular subgraph (service_name)
+    pub(crate) fn batch_include(&self, service_name: &str) -> bool {
+        match &self.subgraph {
+            Some(subgraph_batching_config) => {
+                // Override by checking if all is enabled
+                if subgraph_batching_config.all.enabled {
+                    // If it is, require:
+                    // - no subgraph entry OR
+                    // - an enabled subgraph entry
+                    subgraph_batching_config
+                        .subgraphs
+                        .get(service_name)
+                        .map_or(true, |x| x.enabled)
+                } else {
+                    // If it isn't, require:
+                    // - an enabled subgraph entry
+                    subgraph_batching_config
+                        .subgraphs
+                        .get(service_name)
+                        .is_some_and(|x| x.enabled)
+                }
+            }
+            None => false,
+        }
+    }
 }
