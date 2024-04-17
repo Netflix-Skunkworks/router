@@ -243,12 +243,12 @@ impl Prepare {
                 cargo!(["set-version", &resolved_version, "--package", package])
             }
             replace_in_file!(
-                "./apollo-router-scaffold/templates/base/Cargo.toml",
+                "./apollo-router-scaffold/templates/base/Cargo.toml.template",
                 "^apollo-router\\s*=\\s*\"[^\"]+\"",
                 format!("apollo-router = \"{resolved_version}\"")
             );
             replace_in_file!(
-                "./apollo-router-scaffold/templates/base/xtask/Cargo.toml",
+                "./apollo-router-scaffold/templates/base/xtask/Cargo.toml.template",
                 r#"^apollo-router-scaffold = \{\s*git\s*=\s*"https://github.com/apollographql/router.git",\s*tag\s*=\s*"v[^"]+"\s*\}$"#,
                 format!(
                     r#"apollo-router-scaffold = {{ git = "https://github.com/apollographql/router.git", tag = "v{resolved_version}" }}"#
