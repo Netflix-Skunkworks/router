@@ -119,13 +119,21 @@ impl BridgeQueryPlannerPool {
                     };
                     let start = Instant::now();
 
+                    let operation_name = request
+                        .operation_name
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
+
                     let res = svc.call(request).await;
 
                     f64_histogram!(
                         "apollo.router.query_planner.duration",
                         "Duration of the query planning.",
                         start.elapsed().as_secs_f64(),
-                        [KeyValue::new("workerId", worker_id.to_string())]
+                        [
+                            KeyValue::new("workerId", worker_id.to_string()),
+                            KeyValue::new("operationName", operation_name)
+                        ]
                     );
 
                     let _ = res_sender.send(res);
