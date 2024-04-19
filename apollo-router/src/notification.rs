@@ -146,7 +146,7 @@ where
     V: Send + Sync + Clone + 'static,
 {
     #[builder]
-    pub(crate) fn new(
+    pub fn new(
         ttl: Option<Duration>,
         heartbeat_error_message: Option<V>,
         queue_size: Option<usize>,
@@ -206,7 +206,7 @@ where
     }
 
     // boolean in the tuple means `created`
-    pub(crate) async fn create_or_subscribe(
+    pub async fn create_or_subscribe(
         &mut self,
         topic: K,
         heartbeat_enabled: bool,
@@ -258,7 +258,7 @@ where
         Ok(handle)
     }
 
-    pub(crate) async fn subscribe_if_exist(
+    pub async fn subscribe_if_exist(
         &mut self,
         topic: K,
     ) -> Result<Option<Handle<K, V>>, NotifyError<K, V>> {
@@ -284,7 +284,7 @@ where
         Ok(handle.into())
     }
 
-    pub(crate) async fn exist(&mut self, topic: K) -> Result<bool, NotifyError<K, V>> {
+    pub(crate) async fn exist(&mut self, topic: K) -> Result<bool, NotifyError<V>> {
         // Channel to check if the topic still exists or not
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -320,7 +320,7 @@ where
     }
 
     /// Delete the topic even if several subscribers are still listening
-    pub(crate) async fn force_delete(&mut self, topic: K) -> Result<(), NotifyError<K, V>> {
+    pub(crate) async fn force_delete(&mut self, topic: K) -> Result<(), NotifyError<V>> {
         // if disconnected, we don't care (the task was stopped)
         self.sender
             .send(Notification::ForceDelete { topic })
@@ -458,14 +458,14 @@ where
         }
     }
 
-    pub(crate) fn into_stream(self) -> HandleStream<K, V> {
+    pub fn into_stream(self) -> HandleStream<K, V> {
         HandleStream {
             handle_guard: self.handle_guard,
             msg_receiver: self.msg_receiver,
         }
     }
 
-    pub(crate) fn into_sink(self) -> HandleSink<K, V> {
+    pub fn into_sink(self) -> HandleSink<K, V> {
         HandleSink {
             handle_guard: self.handle_guard,
             msg_sender: self.msg_sender,
@@ -538,7 +538,7 @@ where
     V: Clone + 'static + Send,
 {
     /// Send data to the subscribed topic
-    pub(crate) fn send_sync(&mut self, data: V) -> Result<(), NotifyError<K, V>> {
+    pub(crate) fn send_sync(&mut self, data: V) -> Result<(), NotifyError<V>> {
         self.msg_sender.send(data.into()).map_err(|err| {
             NotifyError::BroadcastSendError(broadcast::error::SendError(err.0.unwrap()))
         })?;
@@ -944,7 +944,7 @@ where
     }
 }
 
-pub(crate) struct RouterBroadcasts {
+pub struct RouterBroadcasts {
     configuration: (
         broadcast::Sender<Weak<Configuration>>,
         broadcast::Receiver<Weak<Configuration>>,
