@@ -8,6 +8,7 @@ use async_channel::bounded;
 use async_channel::Sender;
 use futures::future::BoxFuture;
 use opentelemetry::metrics::MeterProvider;
+use opentelemetry::KeyValue;
 use router_bridge::planner::Planner;
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
@@ -117,8 +118,12 @@ impl BridgeQueryPlannerPool {
                         }
                     };
 
-                    let res = svc.call(request).await;
+                    let operation_name = request
+                        .operation_name
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_string());
 
+                    let res = svc.call(request).await;
                     let _ = res_sender.send(res);
                 }
             });
