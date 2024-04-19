@@ -118,11 +118,6 @@ impl BridgeQueryPlannerPool {
                         }
                     };
 
-                    let operation_name = request
-                        .operation_name
-                        .clone()
-                        .unwrap_or_else(|| "unknown".to_string());
-
                     let res = svc.call(request).await;
                     let _ = res_sender.send(res);
                 }
