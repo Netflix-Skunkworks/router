@@ -34,7 +34,7 @@ use crate::Context;
 pub type BoxService = tower::util::BoxService<Request, Response, BoxError>;
 pub type BoxCloneService = tower::util::BoxCloneService<Request, Response, BoxError>;
 pub type ServiceResult = Result<Response, BoxError>;
-pub(crate) type BoxGqlStream = Pin<Box<dyn Stream<Item = graphql::Response> + Send + Sync>>;
+pub type BoxGqlStream = Pin<Box<dyn Stream<Item = graphql::Response> + Send + Sync>>;
 
 assert_impl_all!(Request: Send);
 #[non_exhaustive]
@@ -51,7 +51,7 @@ pub struct Request {
     /// Name of the subgraph, it's an Option to not introduce breaking change
     pub(crate) subgraph_name: Option<String>,
     /// Channel to send the subscription stream to listen on events coming from subgraph in a task
-    pub(crate) subscription_stream: Option<mpsc::Sender<BoxGqlStream>>,
+    pub subscription_stream: Option<mpsc::Sender<BoxGqlStream>>,
     /// Channel triggered when the client connection has been dropped
     pub(crate) connection_closed_signal: Option<broadcast::Receiver<()>>,
 
