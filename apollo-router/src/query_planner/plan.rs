@@ -36,7 +36,7 @@ pub struct QueryPlan {
     pub(crate) usage_reporting: Arc<UsageReporting>,
     pub(crate) root: PlanNode,
     /// String representation of the query plan (not a json representation)
-    pub(crate) formatted_query_plan: Option<String>,
+    pub formatted_query_plan: Option<String>,
     pub(crate) query: Arc<Query>,
 }
 
