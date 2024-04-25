@@ -1,0 +1,14 @@
+---
+source: apollo-router/tests/integration/lifecycle.rs
+assertion_line: 217
+expression: "command_output(Command::new(IntegrationTest::router_location()).arg(\"config\").arg(\"preview\").env(\"RUST_BACKTRACE\",\n            \"\")).await"
+---
+Success: true
+Exit code: Some(0)
+stderr:
+
+stdout:
+test
+List of all preview configurations with related GitHub discussions:
+
+	- preview_entity_cache: https://github.com/apollographql/router/discussions/4592
