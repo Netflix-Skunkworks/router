@@ -146,6 +146,7 @@ where
                             hash,
                             metadata,
                             plan_options,
+                            ..
                         },
                         _,
                     )| WarmUpCachingQueryKey {
@@ -211,6 +212,7 @@ where
                 query: query.clone(),
                 operation: operation.clone(),
                 hash: doc.hash.clone(),
+                sdl: Arc::clone(&self.schema.raw_sdl),
                 metadata,
                 plan_options,
             };
@@ -391,6 +393,7 @@ where
             query: request.query.clone(),
             operation: request.operation_name.to_owned(),
             hash: doc.hash.clone(),
+            sdl: Arc::clone(&self.schema.raw_sdl),
             metadata,
             plan_options,
         };
@@ -528,6 +531,7 @@ fn stats_report_key_hash(stats_report_key: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CachingQueryKey {
     pub(crate) query: String,
+    pub(crate) sdl: Arc<String>,
     pub(crate) operation: Option<String>,
     pub(crate) hash: Arc<QueryHash>,
     pub(crate) metadata: CacheKeyMetadata,
@@ -547,6 +551,7 @@ impl std::fmt::Display for CachingQueryKey {
         hasher.update(
             &serde_json::to_vec(&self.plan_options).expect("serialization should not fail"),
         );
+        hasher.update(&serde_json::to_vec(&self.sdl).expect("serialization should not fail"));
         let metadata = hex::encode(hasher.finalize());
 
         write!(
