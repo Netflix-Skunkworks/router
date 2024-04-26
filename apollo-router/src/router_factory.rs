@@ -92,7 +92,7 @@ impl Endpoint {
             handler: Handler::new(handler),
         }
     }
-    pub(crate) fn into_router(self) -> axum::Router {
+    pub fn into_router(self) -> axum::Router {
         let handler = move |req: http::Request<hyper::Body>| {
             let endpoint = self.handler.clone();
             async move {
