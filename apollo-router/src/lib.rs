@@ -104,6 +104,7 @@ pub use crate::uplink::UplinkConfig;
 pub use services::layers::query_analysis::{ParsedDocument, ParsedDocumentInner};
 pub use crate::cache::SecondaryCacheStorage;
 pub use crate::query_planner::CachingQueryKey;
+pub use crate::plugins::Elapsed;
 
 /// Not part of the public API
 #[doc(hidden)]
