@@ -8,11 +8,11 @@ use http::StatusCode;
 
 /// The timeout elapsed.
 #[derive(Debug, Default)]
-pub(crate) struct Elapsed;
+pub struct Elapsed;
 
 impl Elapsed {
     /// Construct a new elapsed error
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Elapsed {}
     }
 }
