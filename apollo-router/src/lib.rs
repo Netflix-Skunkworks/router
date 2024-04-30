@@ -100,6 +100,7 @@ pub use crate::router_factory::Endpoint;
 pub use crate::test_harness::MockedSubgraphs;
 pub use crate::test_harness::TestHarness;
 pub use crate::uplink::UplinkConfig;
+pub use crate::plugins::Elapsed;
 
 /// Not part of the public API
 #[doc(hidden)]
