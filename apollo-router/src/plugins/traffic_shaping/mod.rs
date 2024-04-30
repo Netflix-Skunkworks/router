@@ -33,7 +33,7 @@ use self::deduplication::QueryDeduplicationLayer;
 use self::rate::RateLimitLayer;
 use self::rate::RateLimited;
 pub(crate) use self::retry::RetryPolicy;
-use self::timeout::Elapsed;
+pub use self::timeout::Elapsed;
 use self::timeout::TimeoutLayer;
 use crate::error::ConfigurationError;
 use crate::graphql;
@@ -329,13 +329,13 @@ impl TrafficShaping {
                     .boxed()
                 },
             )
-            .layer(TimeoutLayer::new(
+            .option_layer(
                 self.config
                     .router
                     .as_ref()
                     .and_then(|r| r.timeout)
-                    .unwrap_or(DEFAULT_TIMEOUT),
-            ))
+                    .map(TimeoutLayer::new),
+            )
             .option_layer(self.rate_limit_router.clone())
             .service(service)
     }

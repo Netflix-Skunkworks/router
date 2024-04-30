@@ -40,3 +40,5 @@ pub(crate) mod telemetry;
 #[cfg(test)]
 pub(crate) mod test;
 pub(crate) mod traffic_shaping;
+
+pub use traffic_shaping::Elapsed;
