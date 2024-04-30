@@ -33,7 +33,7 @@ use self::deduplication::QueryDeduplicationLayer;
 use self::rate::RateLimitLayer;
 pub(crate) use self::rate::RateLimited;
 pub(crate) use self::retry::RetryPolicy;
-pub(crate) use self::timeout::Elapsed;
+pub use self::timeout::Elapsed;
 use self::timeout::TimeoutLayer;
 use crate::error::ConfigurationError;
 use crate::plugin::Plugin;
@@ -295,8 +295,11 @@ impl TrafficShaping {
         supergraph::Request,
         Response = supergraph::Response,
         Error = BoxError,
-        Future = timeout::future::ResponseFuture<
-            Oneshot<tower::util::Either<rate::service::RateLimit<S>, S>, supergraph::Request>,
+        Future = tower::util::Either<
+            timeout::future::ResponseFuture<
+                Oneshot<tower::util::Either<rate::service::RateLimit<S>, S>, supergraph::Request>,
+            >,
+            tower::util::Either<rate::future::ResponseFuture<S::Future>, S::Future>,
         >,
     > + Clone
            + Send
@@ -311,13 +314,13 @@ impl TrafficShaping {
         <S as Service<supergraph::Request>>::Future: std::marker::Send,
     {
         ServiceBuilder::new()
-            .layer(TimeoutLayer::new(
+            .option_layer(
                 self.config
                     .router
                     .as_ref()
                     .and_then(|r| r.timeout)
-                    .unwrap_or(DEFAULT_TIMEOUT),
-            ))
+                    .map(TimeoutLayer::new),
+            )
             .option_layer(self.rate_limit_router.clone())
             .service(service)
     }

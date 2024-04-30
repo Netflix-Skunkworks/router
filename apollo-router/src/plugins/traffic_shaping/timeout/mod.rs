@@ -19,7 +19,7 @@ use tower::ServiceExt;
 
 use self::future::ResponseFuture;
 pub(crate) use self::layer::TimeoutLayer;
-pub(crate) use crate::plugins::traffic_shaping::timeout::error::Elapsed;
+pub use error::Elapsed;
 
 /// Applies a timeout to requests.
 #[derive(Debug, Clone)]
