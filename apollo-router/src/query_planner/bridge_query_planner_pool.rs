@@ -22,6 +22,8 @@ use crate::services::QueryPlannerRequest;
 use crate::services::QueryPlannerResponse;
 use crate::spec::Schema;
 use crate::Configuration;
+use crate::Elapsed;
+use crate::ParsedDocument;
 
 static CHANNEL_SIZE: usize = 1_000;
 
@@ -124,15 +126,30 @@ impl BridgeQueryPlannerPool {
                         .clone()
                         .unwrap_or_else(|| "unknown".to_string());
 
+                    let query_hash = {
+                        let extensions = request.context.extensions().lock();
+
+                        extensions.get::<ParsedDocument>()
+                            .map(|doc| hex::encode(&doc.hash.0))
+                            .unwrap_or("unknown".into())
+                    };
+
                     let res = svc.call(request).await;
+
+                    let elapsed = start.elapsed().as_secs_f64();
+
+                    // Log info about queries that take a long time to plan...
+                    if elapsed > 8.0 {
+                        tracing::warn!(query_hash = query_hash, "SLOW QUERY {} took {} secs", operation_name, elapsed);
+                    }
 
                     f64_histogram!(
                         "apollo.router.query_planner.duration",
                         "Duration of the query planning.",
-                        start.elapsed().as_secs_f64(),
+                        elapsed,
                         [
                             KeyValue::new("workerId", worker_id.to_string()),
-                            KeyValue::new("operationName", operation_name)
+                            KeyValue::new("operationName", operation_name),
                         ]
                     );
 
@@ -193,10 +210,14 @@ impl tower::Service<QueryPlannerRequest> for BridgeQueryPlannerPool {
             let _ = sender.send((req, response_sender)).await;
 
             tracing::info!(value.apollo_router_query_planner_queue_size = sender.len());
+            tracing::info!(histogram.planner_queue_size_distribution = sender.len());
+
             let res = response_receiver
                 .await
                 .map_err(|_| QueryPlannerError::UnhandledPlannerResult)?;
+
             tracing::info!(value.apollo_router_query_planner_queue_size = sender.len());
+            tracing::info!(histogram.planner_queue_size_distribution = sender.len());
 
             f64_histogram!(
                 "apollo_router_query_planning_time",
