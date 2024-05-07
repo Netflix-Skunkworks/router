@@ -24,6 +24,8 @@ use crate::services::QueryPlannerRequest;
 use crate::services::QueryPlannerResponse;
 use crate::spec::Schema;
 use crate::Configuration;
+use crate::Elapsed;
+use crate::ParsedDocument;
 
 static CHANNEL_SIZE: usize = 1_000;
 
@@ -182,9 +184,15 @@ impl tower::Service<QueryPlannerRequest> for BridgeQueryPlannerPool {
             let start = Instant::now();
             let _ = sender.send((req, response_sender)).await;
 
+            tracing::info!(value.apollo_router_query_planner_queue_size = sender.len());
+            tracing::info!(histogram.planner_queue_size_distribution = sender.len());
+
             let res = response_receiver
                 .await
                 .map_err(|_| QueryPlannerError::UnhandledPlannerResult)?;
+
+            tracing::info!(value.apollo_router_query_planner_queue_size = sender.len());
+            tracing::info!(histogram.planner_queue_size_distribution = sender.len());
 
             f64_histogram!(
                 "apollo.router.query_planning.total.duration",
