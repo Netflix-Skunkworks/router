@@ -615,6 +615,12 @@ async fn handle_graphql(
     experimental_log_on_broken_pipe: bool,
     http_request: Request<DecompressionBody<Body>>,
 ) -> impl IntoResponse {
+    u64_counter!(
+        "apollo_graphql_handle_graphql_call",
+        "Total number of HTTP requests made.",
+        1
+    );
+
     let _guard = SessionCountGuard::start();
 
     let (parts, body) = http_request.into_parts();
