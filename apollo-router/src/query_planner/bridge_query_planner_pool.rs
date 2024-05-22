@@ -129,7 +129,8 @@ impl BridgeQueryPlannerPool {
                     let query_hash = {
                         let extensions = request.context.extensions().lock();
 
-                        extensions.get::<ParsedDocument>()
+                        extensions
+                            .get::<ParsedDocument>()
                             .map(|doc| hex::encode(&doc.hash.0))
                             .unwrap_or("unknown".into())
                     };
@@ -140,7 +141,12 @@ impl BridgeQueryPlannerPool {
 
                     // Log info about queries that take a long time to plan...
                     if elapsed > 8.0 {
-                        tracing::warn!(query_hash = query_hash, "SLOW QUERY {} took {} secs", operation_name, elapsed);
+                        tracing::warn!(
+                            query_hash = query_hash,
+                            "SLOW QUERY {} took {} secs",
+                            operation_name,
+                            elapsed
+                        );
                     }
 
                     f64_histogram!(

@@ -112,7 +112,14 @@ where
         subgraph_schemas: Arc<HashMap<String, Arc<Valid<apollo_compiler::Schema>>>>,
         configuration: &Configuration,
         plugins: Plugins,
-        secondary_cache: Option<Arc<dyn SecondaryCacheStorage<CachingQueryKey, Result<QueryPlannerContent, Arc<QueryPlannerError>>>>>,
+        secondary_cache: Option<
+            Arc<
+                dyn SecondaryCacheStorage<
+                    CachingQueryKey,
+                    Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+                >,
+            >,
+        >,
     ) -> Result<CachingQueryPlanner<T>, BoxError> {
         let cache = Arc::new(
             DeduplicatingCache::from_configuration(
