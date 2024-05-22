@@ -27,6 +27,7 @@ use http_body::Body as _;
 use hyper::Body;
 use mime::APPLICATION_JSON;
 use multimap::MultiMap;
+use time::Instant;
 use tower::BoxError;
 use tower::Layer;
 use tower::ServiceBuilder;
@@ -269,11 +270,16 @@ impl RouterService {
     ) -> Result<router::Response, BoxError> {
         let req_svc = self.supergraph_request_service_creator.create();
 
+        let now = Instant::now();
+
         let SupergraphResponse { response, context } =
             match req_svc.oneshot(supergraph_request).await {
                 Ok(req) => self.supergraph_creator.create().oneshot(req).await?,
                 Err(res) => res,
             };
+
+        let processing_seconds = now.elapsed().as_seconds_f64();
+        tracing::info!(histogram.apollo_router_supergraph_request_time = processing_seconds,);
 
         let ClientRequestAccepts {
             wildcard: accepts_wildcard,
@@ -901,8 +907,12 @@ impl RouterCreator {
         let static_page = StaticPageLayer::new(&configuration);
         let apq_layer = if configuration.apq.enabled {
             APQLayer::with_cache(
-                DeduplicatingCache::from_configuration(&configuration.apq.router.cache, "APQ", None)
-                    .await?,
+                DeduplicatingCache::from_configuration(
+                    &configuration.apq.router.cache,
+                    "APQ",
+                    None,
+                )
+                .await?,
             )
         } else {
             APQLayer::disabled()

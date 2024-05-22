@@ -82,6 +82,7 @@ pub mod tracer;
 mod uplink;
 
 pub use crate::axum_factory::unsupported_set_axum_router_callback;
+pub use crate::cache::SecondaryCacheStorage;
 pub use crate::configuration::Configuration;
 pub use crate::configuration::ListenAddr;
 pub use crate::context::extensions::sync::ExtensionsMutex;
@@ -91,6 +92,8 @@ pub use crate::executable::main;
 pub use crate::executable::Executable;
 pub use crate::notification::Notify;
 pub use crate::notification::NotifyError;
+pub use crate::plugins::Elapsed;
+pub use crate::query_planner::CachingQueryKey;
 pub use crate::router::ApolloRouterError;
 pub use crate::router::ConfigurationSource;
 pub use crate::router::LicenseSource;
@@ -102,9 +105,6 @@ pub use crate::test_harness::MockedSubgraphs;
 pub use crate::test_harness::TestHarness;
 pub use crate::uplink::UplinkConfig;
 pub use services::layers::query_analysis::{ParsedDocument, ParsedDocumentInner};
-pub use crate::cache::SecondaryCacheStorage;
-pub use crate::query_planner::CachingQueryKey;
-pub use crate::plugins::Elapsed;
 
 /// Not part of the public API
 #[doc(hidden)]
