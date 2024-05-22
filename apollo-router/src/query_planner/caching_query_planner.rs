@@ -82,7 +82,14 @@ where
         schema: Arc<Schema>,
         configuration: &Configuration,
         plugins: Plugins,
-        secondary_cache: Option<Arc<dyn SecondaryCacheStorage<CachingQueryKey, Result<QueryPlannerContent, Arc<QueryPlannerError>>>>>,
+        secondary_cache: Option<
+            Arc<
+                dyn SecondaryCacheStorage<
+                    CachingQueryKey,
+                    Result<QueryPlannerContent, Arc<QueryPlannerError>>,
+                >,
+            >,
+        >,
     ) -> Result<CachingQueryPlanner<T>, BoxError> {
         let cache = Arc::new(
             DeduplicatingCache::from_configuration(
@@ -746,10 +753,15 @@ mod tests {
         )
         .unwrap();
 
-        let mut planner =
-            CachingQueryPlanner::new(delegate, Arc::new(schema), &configuration, IndexMap::new(), None)
-                .await
-                .unwrap();
+        let mut planner = CachingQueryPlanner::new(
+            delegate,
+            Arc::new(schema),
+            &configuration,
+            IndexMap::new(),
+            None,
+        )
+        .await
+        .unwrap();
 
         let context = Context::new();
         context.extensions().lock().insert::<ParsedDocument>(doc);

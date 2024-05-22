@@ -10,6 +10,7 @@ use apollo_compiler::ExecutableDocument;
 use http::StatusCode;
 use lru::LruCache;
 use router_bridge::planner::UsageReporting;
+use time::Instant;
 use tokio::sync::Mutex;
 
 use crate::context::OPERATION_KIND;
@@ -104,6 +105,8 @@ impl QueryAnalysisLayer {
         }
 
         let op_name = request.supergraph_request.body().operation_name.clone();
+        let now = Instant::now();
+
         let query = request
             .supergraph_request
             .body()
@@ -187,6 +190,9 @@ impl QueryAnalysisLayer {
             }
             Some(c) => c,
         };
+
+        let processing_seconds = now.elapsed().as_seconds_f64();
+        tracing::info!(histogram.apollo_router_parse_validate_time = processing_seconds,);
 
         match res {
             Ok((context, doc)) => {

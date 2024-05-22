@@ -221,9 +221,10 @@ mod tests {
     #[tokio::test]
     async fn example_cache_usage() {
         let k = "key".to_string();
-        let cache = DeduplicatingCache::with_capacity(NonZeroUsize::new(1).unwrap(), None, "test", None)
-            .await
-            .unwrap();
+        let cache =
+            DeduplicatingCache::with_capacity(NonZeroUsize::new(1).unwrap(), None, "test", None)
+                .await
+                .unwrap();
 
         let entry = cache.get(&k).await;
 
