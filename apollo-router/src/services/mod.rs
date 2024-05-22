@@ -10,7 +10,6 @@ use crate::http_ext;
 pub use crate::http_ext::TryIntoHeaderName;
 pub use crate::http_ext::TryIntoHeaderValue;
 pub use crate::query_planner::OperationKind;
-pub use query_planner::QueryPlannerContent;
 pub(crate) use crate::services::execution::Request as ExecutionRequest;
 pub(crate) use crate::services::execution::Response as ExecutionResponse;
 pub(crate) use crate::services::query_planner::Request as QueryPlannerRequest;
@@ -22,6 +21,7 @@ pub(crate) use crate::services::subgraph::Response as SubgraphResponse;
 pub(crate) use crate::services::supergraph::service::SupergraphCreator;
 pub(crate) use crate::services::supergraph::Request as SupergraphRequest;
 pub(crate) use crate::services::supergraph::Response as SupergraphResponse;
+pub use query_planner::QueryPlannerContent;
 
 pub mod execution;
 pub(crate) mod external;
