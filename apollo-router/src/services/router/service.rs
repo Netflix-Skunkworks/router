@@ -271,15 +271,14 @@ impl RouterService {
         let req_svc = self.supergraph_request_service_creator.create();
 
         let now = Instant::now();
-
-        let SupergraphResponse { response, context } =
-            match req_svc.oneshot(supergraph_request).await {
-                Ok(req) => self.supergraph_creator.create().oneshot(req).await?,
-                Err(res) => res,
-            };
-
+        let supergraph_request_result = req_svc.oneshot(supergraph_request).await;
         let processing_seconds = now.elapsed().as_seconds_f64();
         tracing::info!(histogram.apollo_router_supergraph_request_time = processing_seconds,);
+
+        let SupergraphResponse { response, context } = match supergraph_request_result {
+            Ok(req) => self.supergraph_creator.create().oneshot(req).await?,
+            Err(res) => res,
+        };
 
         let ClientRequestAccepts {
             wildcard: accepts_wildcard,
