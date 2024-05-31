@@ -210,7 +210,11 @@ where
         } in all_cache_keys
         {
             let context = Context::new();
-            let doc = match query_analysis.parse_document(&query, operation.as_deref()) {
+
+            let doc = match query_analysis
+                .parse_document(&query, operation.as_deref())
+                .await
+            {
                 Ok(doc) => doc,
                 Err(_) => continue,
             };
@@ -241,7 +245,10 @@ where
 
             let entry = self.cache.get(&caching_key).await;
             if entry.is_first() {
-                let doc = match query_analysis.parse_document(&query, operation.as_deref()) {
+                let doc = match query_analysis
+                    .parse_document(&query, operation.as_deref())
+                    .await
+                {
                     Ok(doc) => doc,
                     Err(error) => {
                         let e = Arc::new(QueryPlannerError::SpecError(error));
