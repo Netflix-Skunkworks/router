@@ -10,8 +10,9 @@ use apollo_compiler::ExecutableDocument;
 use http::StatusCode;
 use lru::LruCache;
 use router_bridge::planner::UsageReporting;
+use std::sync::Mutex;
 use time::Instant;
-use tokio::sync::Mutex;
+use tracing::Instrument;
 
 use crate::apollo_studio_interop::generate_extended_references;
 use crate::apollo_studio_interop::ExtendedReferenceStats;
@@ -74,12 +75,33 @@ impl QueryAnalysisLayer {
         }
     }
 
-    pub(crate) fn parse_document(
+    pub(crate) async fn parse_document(
         &self,
         query: &str,
         operation_name: Option<&str>,
     ) -> Result<ParsedDocument, SpecError> {
-        Query::parse_document(query, operation_name, &self.schema, &self.configuration)
+        let query = query.to_string();
+        let operation_name = operation_name.map(|o| o.to_string());
+        let schema = self.schema.clone();
+        let conf = self.configuration.clone();
+
+        tokio::task::spawn_blocking(move || {
+            let now = Instant::now();
+
+            let parsed = Query::parse_document(
+                &query,
+                operation_name.as_deref(),
+                schema.as_ref(),
+                conf.as_ref(),
+            );
+
+            let processing_seconds = now.elapsed().as_seconds_f64();
+            tracing::info!(histogram.apollo.router.parse_validate_query = processing_seconds,);
+
+            parsed
+        })
+        .await
+        .expect("parse_document task panicked")
     }
 
     pub(crate) async fn supergraph_request(
@@ -118,10 +140,11 @@ impl QueryAnalysisLayer {
             .query
             .clone()
             .expect("query presence was already checked");
+
         let entry = self
             .cache
             .lock()
-            .await
+            .unwrap()
             .get(&QueryAnalysisKey {
                 query: query.clone(),
                 operation_name: op_name.clone(),
@@ -130,10 +153,16 @@ impl QueryAnalysisLayer {
 
         let res = match entry {
             None => {
-                let span = tracing::info_span!(QUERY_PARSING_SPAN_NAME, "otel.kind" = "INTERNAL");
-                match span.in_scope(|| self.parse_document(&query, op_name.as_deref())) {
+                let span = tracing::info_span!("parse_query", "otel.kind" = "INTERNAL");
+
+                let result = self
+                    .parse_document(&query, op_name.as_deref())
+                    .instrument(span)
+                    .await;
+
+                match result {
                     Err(errors) => {
-                        (*self.cache.lock().await).put(
+                        (*self.cache.lock().unwrap()).put(
                             QueryAnalysisKey {
                                 query,
                                 operation_name: op_name,
@@ -182,7 +211,7 @@ impl QueryAnalysisLayer {
                             .insert(OPERATION_KIND, operation_kind.unwrap_or_default())
                             .expect("cannot insert operation kind in the context; this is a bug");
 
-                        (*self.cache.lock().await).put(
+                        (*self.cache.lock().unwrap()).put(
                             QueryAnalysisKey {
                                 query,
                                 operation_name: op_name.clone(),
@@ -198,7 +227,7 @@ impl QueryAnalysisLayer {
         };
 
         let processing_seconds = now.elapsed().as_seconds_f64();
-        tracing::info!(histogram.apollo_router_parse_validate_time = processing_seconds,);
+        tracing::info!(histogram.apollo.router.get_parsed_document = processing_seconds,);
 
         match res {
             Ok((context, doc)) => {
