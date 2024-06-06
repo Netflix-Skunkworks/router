@@ -199,7 +199,7 @@ where
                             metadata,
                             plan_options,
                             config_mode: _,
-                            sdl: _,
+                            schema_hash: _,
                             introspection: _,
                         },
                         _,
@@ -276,7 +276,7 @@ where
                 query: query.clone(),
                 operation: operation.clone(),
                 hash: doc.hash.clone(),
-                sdl: Arc::clone(&self.schema.raw_sdl),
+                schema_hash: self.schema.hash.clone(),
                 metadata,
                 plan_options,
                 config_mode: self.config_mode.clone(),
@@ -467,7 +467,7 @@ where
             query: request.query.clone(),
             operation: request.operation_name.to_owned(),
             hash: doc.hash.clone(),
-            sdl: Arc::clone(&self.schema.raw_sdl),
+            schema_hash: self.schema.hash.clone(),
             metadata,
             plan_options,
             config_mode: self.config_mode.clone(),
@@ -612,9 +612,9 @@ fn stats_report_key_hash(stats_report_key: &str) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CachingQueryKey {
     pub(crate) query: String,
-    pub(crate) sdl: Arc<String>,
     pub(crate) operation: Option<String>,
     pub(crate) hash: Arc<QueryHash>,
+    pub(crate) schema_hash: Arc<QueryHash>,
     pub(crate) metadata: CacheKeyMetadata,
     pub(crate) plan_options: PlanOptions,
     pub(crate) config_mode: ConfigMode,
@@ -639,7 +639,7 @@ impl std::fmt::Display for CachingQueryKey {
         );
         hasher
             .update(&serde_json::to_vec(&self.config_mode).expect("serialization should not fail"));
-        hasher.update(&serde_json::to_vec(&self.sdl).expect("serialization should not fail"));
+        hasher.update(&serde_json::to_vec(&self.schema_hash).expect("serialization should not fail"));
         hasher.update([self.introspection as u8]);
         let metadata = hex::encode(hasher.finalize());
 
@@ -653,7 +653,7 @@ impl std::fmt::Display for CachingQueryKey {
 
 impl Hash for CachingQueryKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.sdl.hash(state);
+        self.schema_hash.hash(state);
         self.hash.0.hash(state);
         self.operation.hash(state);
         self.metadata.hash(state);
