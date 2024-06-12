@@ -10,6 +10,7 @@ use apollo_compiler::validation::Valid;
 use apollo_compiler::ExecutableDocument;
 use apollo_compiler::NodeStr;
 use apollo_federation::query_plan::query_planner::QueryPlanner;
+use opentelemetry::KeyValue;
 
 use super::fetch::FetchNode;
 use super::fetch::SubgraphOperation;
