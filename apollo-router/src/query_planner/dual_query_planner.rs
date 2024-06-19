@@ -3,12 +3,14 @@
 use std::borrow::Borrow;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::time::Instant;
 
 use apollo_compiler::ast::Name;
 use apollo_compiler::validation::Valid;
 use apollo_compiler::ExecutableDocument;
 use apollo_compiler::NodeStr;
 use apollo_federation::query_plan::query_planner::QueryPlanner;
+use opentelemetry::KeyValue;
 
 use super::fetch::FetchNode;
 use super::fetch::SubgraphOperation;
@@ -69,8 +71,25 @@ impl BothModeComparisonJob {
         let rust_result = std::panic::catch_unwind(|| {
             let name = self.operation_name.clone().map(Name::new).transpose()?;
             USING_CATCH_UNWIND.set(true);
+
+            let start = Instant::now();
+
             // No question mark operator or macro from here …
             let result = self.rust_planner.build_query_plan(&self.document, name);
+
+            let operation_name = self
+                .operation_name
+                .clone()
+                .map(|name| name.as_str().to_owned())
+                .unwrap_or_else(|| "none".to_string());
+
+            f64_histogram!(
+                "apollo.router.query_planning.rust.duration",
+                "Duration of the query planning.",
+                start.elapsed().as_secs_f64(),
+                [KeyValue::new("operationName", operation_name),]
+            );
+
             // … to here, so the thread can only eiher reach here or panic.
             // We unset USING_CATCH_UNWIND in both cases.
             USING_CATCH_UNWIND.set(false);
