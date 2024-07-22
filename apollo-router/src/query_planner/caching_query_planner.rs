@@ -960,6 +960,7 @@ mod tests {
             Default::default(),
             &configuration,
             IndexMap::default(),
+            None,
         )
         .await
         .unwrap();
