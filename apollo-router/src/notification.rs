@@ -284,7 +284,7 @@ where
         Ok(handle.into())
     }
 
-    pub(crate) async fn exist(&mut self, topic: K) -> Result<bool, NotifyError<K, V>> {
+    pub async fn exist(&mut self, topic: K) -> Result<bool, NotifyError<K, V>> {
         // Channel to check if the topic still exists or not
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -320,7 +320,7 @@ where
     }
 
     /// Delete the topic even if several subscribers are still listening
-    pub(crate) async fn force_delete(&mut self, topic: K) -> Result<(), NotifyError<K, V>> {
+    pub async fn force_delete(&mut self, topic: K) -> Result<(), NotifyError<K, V>> {
         // if disconnected, we don't care (the task was stopped)
         self.sender
             .send(Notification::ForceDelete { topic })
@@ -538,7 +538,7 @@ where
     V: Clone + 'static + Send,
 {
     /// Send data to the subscribed topic
-    pub(crate) fn send_sync(&mut self, data: V) -> Result<(), NotifyError<K, V>> {
+    pub fn send_sync(&mut self, data: V) -> Result<(), NotifyError<K, V>> {
         self.msg_sender.send(data.into()).map_err(|err| {
             NotifyError::BroadcastSendError(broadcast::error::SendError(err.0.unwrap()))
         })?;
