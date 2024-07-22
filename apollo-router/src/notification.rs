@@ -34,7 +34,7 @@ static NOTIFY_CHANNEL_SIZE: usize = 1024;
 static DEFAULT_MSG_CHANNEL_SIZE: usize = 128;
 
 #[derive(Error, Debug)]
-pub(crate) enum NotifyError<K, V> {
+pub enum NotifyError<K, V> {
     #[error("cannot receive data from pubsub")]
     RecvError(#[from] RecvError),
     #[error("cannot send data to pubsub")]
