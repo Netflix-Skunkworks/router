@@ -58,7 +58,7 @@ type ResponseSenderWithCreated<V> = oneshot::Sender<(
     bool,
 )>;
 
-pub(crate) enum Notification<K, V> {
+pub enum Notification<K, V> {
     CreateOrSubscribe {
         topic: K,
         // Sender connected to the original source stream
